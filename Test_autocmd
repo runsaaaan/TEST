@@ -1,0 +1,3175 @@
+;コマンド実行ツール(autocmd.ttl)
+;
+;▽概要
+; 接続設定情報(プロファイル)や対象機器情報(リストファイル)をインプットとして、
+; 機器の設定変更や状態取得を自動的に行う。
+;
+;▽使い方
+; ttpmacro.exe autocmd.ttl <listfile> <prameterfile>
+; <listfile>    リストファイル名
+; <prameterfile>    プロファイル名
+;
+
+;-------------------------------------------------------------------------------
+;ユーザ定数の定義
+;-------------------------------------------------------------------------------
+                              ;変数の長さは31字まで
+TOOL_NAME               = 'autocmd'                         ;ツール名
+VERSION                 = '2.00'                            ;バージョン
+TOOL_LOG_FILE_NAME      = 'autocmdlog_%DATE%-%TIME%.log'    ;ログファイル名
+DATE_RESERVED_WORD      = '%DATE%'                          ;年月日の予約語
+TIME_RESERVED_WORD      = '%TIME%'                          ;時分秒の予約語
+NUMBER_RESERVED_WORD    = '%NUMBER%'                        ;項番の予約語
+ADDRESS_RESERVED_WORD   = '%ADDRESS%'                       ;IPアドレスの予約語
+HOST_RESERVED_WORD      = '%HOST%'                          ;ホスト名の予約語
+COMMAND_RESERVED_WORD   = '%COMMAND%'                       ;コマンドの予約語
+DUMMY_RESERVED_WORD     = '%DUMMY%'                         ;ダミーの予約語
+WAIT_COMMAND            = '\wait'                           ;waitコマンド
+STOP_COMMAND            = '\stop'                           ;stopコマンド
+ABORT_COMMAND           = '\abort'                          ;abortコマンド
+REPEAT_COMMAND          = '\repeat'                         ;repeatコマンド
+LOAD_COMMAND            = '\load'                           ;loadコマンド
+BEEP_COMMAND            = '\beep'                           ;beepコマンド
+CRLF_COMMAND            = '%BR%'                            ;改行コマンド
+LOAD_WP_OPTION          = '-wp '                            ;loadコマンドプロンプトオプション
+FINGERPRINT_PROMPT = 'to continue connecting (yes/no/[fingerprint])?' ; SSH fingerprint 確認メッセージ
+;-------------------------------------------------------------------------------
+;ユーザ変数の定義
+;-------------------------------------------------------------------------------
+                             ;変数の長さは31字まで
+strDate                     = ''    ;年月日
+strTime                     = ''    ;時分秒
+strNumber                   = ''    ;項番
+strValidNumber              = ''    ;ファイル名にできる文字に変換した項番
+strMessage                  = ''    ;メッセージ
+strHost                     = ''    ;ツールを実行したホスト名
+strUser                     = ''    ;ツールを実行したユーザ名
+strToolLogFileName          = ''    ;ログファイル名
+fhToolLogFile               = -1    ;ログファイルハンドル
+strProfileName              = ''    ;プロファイル名
+fhProfile                   = -1    ;プロファイルハンドル
+strListFileName             = ''    ;リストファイル名
+fhListFile                  = -1    ;リストファイルハンドル
+strDeviceLogFileName        = ''    ;実機ログファイル名
+iDeviceLogFileWrite         = 0     ;実機ログファイル書き込みフラグ
+strConfigFileName           = ''    ;コンフィグファイル名
+fhConfigFile                = -1    ;コンフィグファイルハンドル
+strLoginOnlyFlg             = ''    ;ログインのみ実行フラグ
+iLoadWaitPrompt             = 0     ;\loadコマンドプロンプト待ちフラグ
+strCurrentLine              = ''    ;読み込み中のライン
+strCurrentWord              = ''    ;読み込み中のワード
+strServer1CurrentPrompt      = ''    ;読み込み中の踏み台サーバ1プロンプト
+strServer2CurrentPrompt      = ''    ;読み込み中の踏み台サーバ2プロンプト
+strServer3CurrentPrompt      = ''    ;読み込み中の踏み台サーバ3プロンプト
+strTergetCurrentPrompt      = ''    ;読み込み中の対象機器プロンプト
+strCurrentLineNumber        = '0'   ;読み込み中のライン数
+iCurrentLineNumrber         = 0     ;読み込み中のライン数
+strCurrentHostNumber        = '0'   ;読み込み中のホスト数
+iCurrentHostNumber          = 0     ;読み込み中のホスト数
+strCurrentHost              = ''    ;読み込み中のホスト名
+strCurrentAddress           = ''    ;読み込み中のIPアドレス
+strCurrentCommand           = ''    ;読み込み中のコマンド
+strSuccessHostNumber        = '0'   ;成功したホスト数
+iSuccessHostNumber          = 0     ;成功したホスト数
+iServerNumber                = 0     ;踏み台サーバ数
+iLoginError                 = 0     ;ログインエラーフラグ
+iLogoutError                = 0     ;ログアウトエラーフラグ
+strTergetLoginCommandFormat = ''    ;対象機器のログインコマンドのフォーマット
+strTergetLoginPromptFormat  = ''    ;対象機器のログイン成功時プロンプトのフォーマット
+strTergetEnablePromptFormat = ''    ;対象機器の管理者ログイン成功時プロンプトのフォーマット
+strOrgDevLogFileNameFormat  = ''    ;元の実機ログファイル名フォーマット
+strDeviceLogFileNameFormat  = ''    ;実機ログファイル名のフォーマット
+strServer1LoginCommand       = ''    ;踏み台サーバ1のログインコマンド
+strServer1Address            = ''    ;踏み台サーバ1のIPアドレス
+strServer1ComPortNumber      = ''    ;踏み台サーバ1のCOMポート番号
+strServer1LoginIDMessage     = ''    ;踏み台サーバ1のログインID確認メッセージ
+strServer1LoginID            = ''    ;踏み台サーバ1のログインID
+strServer1LoginPWMessage     = ''    ;踏み台サーバ1のログインPW確認メッセージ
+strServer1LoginPW            = ''    ;踏み台サーバ1のログインPW
+strServer1LoginPrompt        = ''    ;踏み台サーバ1のログイン成功時プロンプト
+strServer1EnableCommand      = ''    ;踏み台サーバ1の管理者ログインコマンド
+strServer1EnablePW           = ''    ;踏み台サーバ1の管理者ログインPW
+strServer1EnablePrompt       = ''    ;踏み台サーバ1の管理者ログイン成功時プロンプト
+strServer1LogoutCommand      = ''    ;踏み台サーバ1のログアウトコマンド
+strServer1DisableCommand     = ''    ;踏み台サーバ1の管理者ログアウトコマンド
+strServer2LoginCommand       = ''    ;踏み台サーバ2のログインコマンド
+strServer2Address            = ''    ;踏み台サーバ2のIPアドレス
+strServer2ComPortNumber      = ''    ;踏み台サーバ2のCOMポート番号
+strServer2LoginIDMessage     = ''    ;踏み台サーバ2のログインID確認メッセージ
+strServer2LoginID            = ''    ;踏み台サーバ2のログインID
+strServer2LoginPWMessage     = ''    ;踏み台サーバ2のログインPW確認メッセージ
+strServer2LoginPW            = ''    ;踏み台サーバ2のログインPW
+strServer2LoginPrompt        = ''    ;踏み台サーバ2のログイン成功時プロンプト
+strServer2EnableCommand      = ''    ;踏み台サーバ2の管理者ログインコマンド
+strServer2EnablePW           = ''    ;踏み台サーバ2の管理者ログインPW
+strServer2EnablePrompt       = ''    ;踏み台サーバ2の管理者ログイン成功時プロンプト
+strServer2LogoutCommand      = ''    ;踏み台サーバ2のログアウトコマンド
+strServer2DisableCommand     = ''    ;踏み台サーバ2の管理者ログアウトコマンド
+strServer3LoginCommand       = ''    ;踏み台サーバ3のログインコマンド
+strServer3Address            = ''    ;踏み台サーバ3のIPアドレス
+strServer3ComPortNumber      = ''    ;踏み台サーバ3のCOMポート番号
+strServer3LoginIDMessage     = ''    ;踏み台サーバ3のログインID確認メッセージ
+strServer3LoginID            = ''    ;踏み台サーバ3のログインID
+strServer3LoginPWMessage     = ''    ;踏み台サーバ3のログインPW確認メッセージ
+strServer3LoginPW            = ''    ;踏み台サーバ3のログインPW
+strServer3LoginPrompt        = ''    ;踏み台サーバ3のログイン成功時プロンプト
+strServer3EnableCommand      = ''    ;踏み台サーバ3の管理者ログインコマンド
+strServer3EnablePW           = ''    ;踏み台サーバ3の管理者ログインPW
+strServer3EnablePrompt       = ''    ;踏み台サーバ3の管理者ログイン成功時プロンプト
+strServer3LogoutCommand      = ''    ;踏み台サーバ3のログアウトコマンド
+strServer3DisableCommand     = ''    ;踏み台サーバ3の管理者ログアウトコマンド
+strTergetLoginCommand       = ''    ;対象機器のログインコマンド
+strTergetBatchCommand       = ''    ;対象機器の一括出力コマンド
+strTergetComPortNumber      = ''    ;対象機器のCOMポート番号
+strTergetLoginIDMessage     = ''    ;対象機器のログインID確認メッセージ
+strTergetLoginID            = ''    ;対象機器のログインID
+strTergetLoginPWMessage     = ''    ;対象機器のログインPW確認メッセージ
+strTergetLoginPW            = ''    ;対象機器のログインPW
+strTergetLoginPrompt        = ''    ;対象機器のログイン成功時プロンプト
+strTergetEnableCommand      = ''    ;対象機器の管理者ログインコマンド
+strTergetEnablePW           = ''    ;対象機器の管理者ログインPW
+strTergetEnablePrompt       = ''    ;対象機器の管理者ログイン成功時プロンプト
+strTergetLogoutCommand      = ''    ;対象機器のログアウトコマンド
+strTergetDisableCommand     = ''    ;対象機器の管理者ログアウトコマンド
+strLoginTimeout             = ''    ;ログインタイムアウト値(s)
+iLoginTimeout               = 0     ;ログインタイムアウト値(s)
+strCommandTimeout           = ''    ;コマンドタイムアウト値(s)
+iCommandTimeout             = 0     ;コマンドタイムアウト値(s)
+strLoginInterval            = ''    ;ログインインターバル(ms)
+iLoginInterval              = 0     ;ログインインターバル(ms)
+strCommandInterval          = ''    ;コマンドインターバル(ms)
+iCommandInterval            = 0     ;コマンドインターバル(ms)
+strToolLogOpenWaitTime      = ''    ;ツールログオープン時の待ち時間(ms)
+iToolLogOpenWaitTime        = 0     ;ツールログオープン時の待ち時間(ms)
+strToolLogCloseWaitTime     = ''    ;ツールログクローズ時の待ち時間(ms)
+iToolLogCloseWaitTime       = 0     ;ツールログクローズ時の待ち時間(ms)
+strMacroStartMessageFlag    = ''    ;マクロ起動時メッセージの表示有無
+strMacroEndMessageFlag      = ''    ;マクロ終了時メッセージの表示有無
+strServer1EnableCommandLog  = ''    ;踏み台サーバ1の管理者ログインコマンドログ文字列
+strServer1LogoutCommandLog  = ''    ;踏み台サーバ1のログアウトコマンドログ文字列
+strServer1DisableCommandLog = ''    ;踏み台サーバ1の管理者ログアウトコマンドログ文字列
+strServer2LoginCommandLog   = ''    ;踏み台サーバ2のログインコマンドログ文字列
+strServer2EnableCommandLog  = ''    ;踏み台サーバ2の管理者ログインコマンドログ文字列
+strServer2LogoutCommandLog  = ''    ;踏み台サーバ2のログアウトコマンドログ文字列
+strServer2DisableCommandLog = ''    ;踏み台サーバ2の管理者ログアウトコマンドログ文字列
+strServer3LoginCommandLog   = ''    ;踏み台サーバ3のログインコマンドログ文字列
+strServer3EnableCommandLog  = ''    ;踏み台サーバ3の管理者ログインコマンドログ文字列
+strServer3LogoutCommandLog  = ''    ;踏み台サーバ3のログアウトコマンドログ文字列
+strServer3DisableCommandLog = ''    ;踏み台サーバ3の管理者ログアウトコマンドログ文字列
+strTergetLoginCommandLog    = ''    ;対象機器のログインコマンドログ文字列
+strTergetEnableCommandLog   = ''    ;対象機器の管理者ログインコマンドログ文字列
+strTergetLogoutCommandLog   = ''    ;対象機器のログアウトコマンドログ文字列
+strTergetDisableCommandLog  = ''    ;対象機器の管理者ログアウトコマンドログ文字列
+
+;-------------------------------------------------------------------------------
+; 1. 事前処理
+;-------------------------------------------------------------------------------
+
+;事前処理
+:INITIARIZE
+
+    ;引数の取得
+    strProfileName = param3
+    strListFileName = param2
+    strNumber = param4
+    strLoginOnlyFlg = param5
+
+    ;項番のNG文字変換
+    replaceValue = strNumber
+    call replaceNGWord
+    strValidNumber = replaceValue
+
+    ;日時の取得
+    gettime strDate '%y%m%d'
+    gettime strTime '%H%M%S'
+
+    ;ホスト名の取得
+    getenv 'COMPUTERNAME' strHost
+
+    ;ユーザ名の取得
+    getenv 'USERNAME' strUser
+
+    ;ログファイルのオープン
+    strToolLogFileName = TOOL_LOG_FILE_NAME
+    strreplace strToolLogFileName 1 NUMBER_RESERVED_WORD strValidNumber
+    strreplace strToolLogFileName 1 DATE_RESERVED_WORD strDate
+    strreplace strToolLogFileName 1 TIME_RESERVED_WORD strTime
+    setdir strValidNumber
+    filecreate fhToolLogFile strToolLogFileName
+    if fhToolLogFile = -1 then
+        strMessage = 'ログファイルが作れません('
+        strconcat strMessage strToolLogFileName
+        strconcat strMessage ')'
+        messagebox strMessage strNumber
+        end
+    endif
+    setdir '..'
+
+    ;ログファイルの書き込み
+    filewrite fhToolLogFile TOOL_NAME
+    filewrite fhToolLogFile ' ver. '
+    filewriteln fhToolLogFile VERSION
+    filewrite fhToolLogFile 'Date: '
+    filewrite fhToolLogFile strDate
+    filewrite fhToolLogFile '-'
+    filewriteln fhToolLogFile strTime
+    filewrite fhToolLogFile 'Host: '
+    filewriteln fhToolLogFile strHost
+    filewrite fhToolLogFile 'User: '
+    filewriteln fhToolLogFile strUser
+
+;-------------------------------------------------------------------------------
+; 2. プロファイルの読み込み
+;-------------------------------------------------------------------------------
+
+;プロファイルのオープン
+:PROFILE_OPEN
+
+    ;ログファイルの書き込み
+    filewrite fhToolLogFile 'Profile: '
+
+    filesearch strProfileName
+    if result=0 then
+        strMessage = 'プロファイルが見つかりません('
+        strconcat strMessage strProfileName 
+        strconcat strMessage ')'
+        messagebox strMessage strNumber
+        filewriteln fhToolLogFile strMessage
+        fileclose fhToolLogFile
+        end
+    endif
+    fileopen fhProfile strProfileName 0
+    if fhProfile = -1 then
+        strMessage = 'プロファイルが開けません('
+        strconcat strMessage strProfileName 
+        strconcat strMessage ')'
+        messagebox strMessage strNumber
+        filewriteln fhToolLogFile strMessage
+        fileclose fhToolLogFile
+        end
+    endif
+
+    ;ログファイルの書き込み
+    filewriteln fhToolLogFile strProfileName
+
+;プロファイルの読み込み
+:PROFILE_READ
+
+    iCurrentLineNumber = 0
+
+    ;プロファイルヘッダの読み飛ばし
+    filereadln fhProfile strCurrentLine
+    iCurrentLineNumber = iCurrentLineNumber + 1
+
+    ;実機ログファイル名
+    strMessage = '実機ログファイル名が見つかりません('
+    call readProfileInfo
+    strDeviceLogFileNameFormat = strCurrentWord
+
+    ;踏み台サーバ1のログインコマンド
+    strMessage = '踏み台サーバ1のログインコマンドが見つかりません('
+    call readProfileInfo
+    strServer1LoginCommand = strCurrentWord
+
+    ;踏み台サーバ1のIPアドレス
+    strMessage = '踏み台サーバ1のIPアドレスが見つかりません('
+    call readProfileInfo
+    strServer1Address = strCurrentWord
+
+    ;踏み台サーバ1のCOMポート番号
+    strMessage = '踏み台サーバ1のCOMポート番号が見つかりません('
+    call readProfileInfo
+    strServer1ComPortNumber = strCurrentWord
+
+    ;踏み台サーバ1のログインID確認メッセージ
+    strMessage = '踏み台サーバ1のログインID確認メッセージが見つかりません('
+    call readProfileInfo
+    strServer1LoginIDMessage = strCurrentWord
+
+    ;踏み台サーバ1のログインID
+    strMessage = '踏み台サーバ1のログインIDが見つかりません('
+    call readProfileInfo
+    strServer1LoginID = strCurrentWord
+
+    ;踏み台サーバ1のログインPW確認メッセージ
+    strMessage = '踏み台サーバ1のログインPW確認メッセージが見つかりません('
+    call readProfileInfo
+    strServer1LoginPWMessage = strCurrentWord
+
+    ;踏み台サーバ1のログインPW
+    strMessage = '踏み台サーバ1のログインPWが見つかりません('
+    call readProfileInfo
+    strServer1LoginPW = strCurrentWord
+
+    ;踏み台サーバ1のログイン成功時プロンプト
+    strMessage = '踏み台サーバ1のログイン成功時プロンプトが見つかりません('
+    call readProfileInfo
+    strServer1LoginPrompt = strCurrentWord
+
+    ;踏み台サーバ1の管理者ログインコマンド
+    strMessage = '踏み台サーバ1の管理者ログインコマンドが見つかりません('
+    call readProfileInfo
+    strServer1EnableCommand = strCurrentWord
+
+    ;踏み台サーバ1の管理者ログインPW
+    strMessage = '踏み台サーバ1の管理者ログインPWが見つかりません('
+    call readProfileInfo
+    strServer1EnablePW = strCurrentWord
+
+    ;踏み台サーバ1の管理者ログイン成功時プロンプト
+    strMessage = '踏み台サーバ1の管理者ログイン成功時プロンプトが見つかりません('
+    call readProfileInfo
+    strServer1EnablePrompt = strCurrentWord
+    
+    ;踏み台サーバ1のログアウトコマンド
+    strMessage = '踏み台サーバ1のログアウトコマンドが見つかりません('
+    call readProfileInfo
+    strServer1LogoutCommand = strCurrentWord
+
+    ;踏み台サーバ1の管理者ログアウトコマンド
+    strMessage = '踏み台サーバ1の管理者ログアウトコマンドが見つかりません('
+    call readProfileInfo
+    strServer1DisableCommand = strCurrentWord
+
+    ;踏み台サーバ2のログインコマンド
+    strMessage = '踏み台サーバ2のログインコマンドが見つかりません('
+    call readProfileInfo
+    strServer2LoginCommand = strCurrentWord
+
+    ;踏み台サーバ2のIPアドレス
+    strMessage = '踏み台サーバ2のIPアドレスが見つかりません('
+    call readProfileInfo
+    strServer2Address = strCurrentWord
+
+    ;踏み台サーバ2のCOMポート番号
+    strMessage = '踏み台サーバ2のCOMポート番号が見つかりません('
+    call readProfileInfo
+    strServer2ComPortNumber = strCurrentWord
+
+    ;踏み台サーバ2のログインID確認メッセージ
+    strMessage = '踏み台サーバ2のログインID確認メッセージが見つかりません('
+    call readProfileInfo
+    strServer2LoginIDMessage = strCurrentWord
+
+    ;踏み台サーバ2のログインID
+    strMessage = '踏み台サーバ2のログインIDが見つかりません('
+    call readProfileInfo
+    strServer2LoginID = strCurrentWord
+
+    ;踏み台サーバ2のログインPW確認メッセージ
+    strMessage = '踏み台サーバ2のログインPW確認メッセージが見つかりません('
+    call readProfileInfo
+    strServer2LoginPWMessage = strCurrentWord
+
+    ;踏み台サーバ2のログインPW
+    strMessage = '踏み台サーバ2のログインPWが見つかりません('
+    call readProfileInfo
+    strServer2LoginPW = strCurrentWord
+
+    ;踏み台サーバ2のログイン成功時プロンプト
+    strMessage = '踏み台サーバ2のログイン成功時プロンプトが見つかりません('
+    call readProfileInfo
+    strServer2LoginPrompt = strCurrentWord
+
+    ;踏み台サーバ2の管理者ログインコマンド
+    strMessage = '踏み台サーバ2の管理者ログインコマンドが見つかりません('
+    call readProfileInfo
+    strServer2EnableCommand = strCurrentWord
+
+    ;踏み台サーバ2の管理者ログインPW
+    strMessage = '踏み台サーバ2の管理者ログインPWが見つかりません('
+    call readProfileInfo
+    strServer2EnablePW = strCurrentWord
+
+    ;踏み台サーバ2の管理者ログイン成功時プロンプト
+    strMessage = '踏み台サーバ2の管理者ログイン成功時プロンプトが見つかりません('
+    call readProfileInfo
+    strServer2EnablePrompt = strCurrentWord
+    
+    ;踏み台サーバ2のログアウトコマンド
+    strMessage = '踏み台サーバ2のログアウトコマンドが見つかりません('
+    call readProfileInfo
+    strServer2LogoutCommand = strCurrentWord
+
+    ;踏み台サーバ2の管理者ログアウトコマンド
+    strMessage = '踏み台サーバ2の管理者ログアウトコマンドが見つかりません('
+    call readProfileInfo
+    strServer2DisableCommand = strCurrentWord
+
+    ;踏み台サーバ3のログインコマンド
+    strMessage = '踏み台サーバ3のログインコマンドが見つかりません('
+    call readProfileInfo
+    strServer3LoginCommand = strCurrentWord
+
+    ;踏み台サーバ3のIPアドレス
+    strMessage = '踏み台サーバ3のIPアドレスが見つかりません('
+    call readProfileInfo
+    strServer3Address = strCurrentWord
+
+    ;踏み台サーバ3のCOMポート番号
+    strMessage = '踏み台サーバ3のCOMポート番号が見つかりません('
+    call readProfileInfo
+    strServer3ComPortNumber = strCurrentWord
+
+    ;踏み台サーバ3のログインID確認メッセージ
+    strMessage = '踏み台サーバ3のログインID確認メッセージが見つかりません('
+    call readProfileInfo
+    strServer3LoginIDMessage = strCurrentWord
+
+    ;踏み台サーバ3のログインID
+    strMessage = '踏み台サーバ3のログインIDが見つかりません('
+    call readProfileInfo
+    strServer3LoginID = strCurrentWord
+
+    ;踏み台サーバ3のログインPW確認メッセージ
+    strMessage = '踏み台サーバ3のログインPW確認メッセージが見つかりません('
+    call readProfileInfo
+    strServer3LoginPWMessage = strCurrentWord
+
+    ;踏み台サーバ3のログインPW
+    strMessage = '踏み台サーバ3のログインPWが見つかりません('
+    call readProfileInfo
+    strServer3LoginPW = strCurrentWord
+
+    ;踏み台サーバ3のログイン成功時プロンプト
+    strMessage = '踏み台サーバ3のログイン成功時プロンプトが見つかりません('
+    call readProfileInfo
+    strServer3LoginPrompt = strCurrentWord
+
+    ;踏み台サーバ3の管理者ログインコマンド
+    strMessage = '踏み台サーバ3の管理者ログインコマンドが見つかりません('
+    call readProfileInfo
+    strServer3EnableCommand = strCurrentWord
+
+    ;踏み台サーバ3の管理者ログインPW
+    strMessage = '踏み台サーバ3の管理者ログインPWが見つかりません('
+    call readProfileInfo
+    strServer3EnablePW = strCurrentWord
+
+    ;踏み台サーバ3の管理者ログイン成功時プロンプト
+    strMessage = '踏み台サーバ3の管理者ログイン成功時プロンプトが見つかりません('
+    call readProfileInfo
+    strServer3EnablePrompt = strCurrentWord
+    
+    ;踏み台サーバ3のログアウトコマンド
+    strMessage = '踏み台サーバ3のログアウトコマンドが見つかりません('
+    call readProfileInfo
+    strServer3LogoutCommand = strCurrentWord
+
+    ;踏み台サーバ3の管理者ログアウトコマンド
+    strMessage = '踏み台サーバ3の管理者ログアウトコマンドが見つかりません('
+    call readProfileInfo
+    strServer3DisableCommand = strCurrentWord
+
+    ;対象機器のログインコマンド
+    strMessage = '対象機器のログインコマンドが見つかりません('
+    call readProfileInfo
+    strTergetLoginCommand = strCurrentWord
+
+    ;対象機器の一括出力コマンド
+    strMessage = '対象機器の一括出力コマンドが見つかりません('
+    call readProfileInfo
+    strTergetBatchCommand = strCurrentWord
+
+    ;対象機器のCOMポート番号
+    strMessage = '対象機器のCOMポート番号が見つかりません('
+    call readProfileInfo
+    strTergetComPortNumber = strCurrentWord
+
+    ;対象機器のログインID確認メッセージ
+    strMessage = '対象機器のログインID確認メッセージが見つかりません('
+    call readProfileInfo
+    strTergetLoginIDMessage = strCurrentWord
+
+    ;対象機器のログインID
+    strMessage = '対象機器のログインIDが見つかりません('
+    call readProfileInfo
+    strTergetLoginID = strCurrentWord
+
+    ;対象機器のログインPW確認メッセージ
+    strMessage = '対象機器のログインPW確認メッセージが見つかりません('
+    call readProfileInfo
+    strTergetLoginPWMessage = strCurrentWord
+
+    ;対象機器のログインPW
+    strMessage = '対象機器のログインPWが見つかりません('
+    call readProfileInfo
+    strTergetLoginPW = strCurrentWord
+
+    ;対象機器のログイン成功時プロンプト
+    strMessage = '対象機器のログイン成功時プロンプトが見つかりません('
+    call readProfileInfo
+    strTergetLoginPrompt = strCurrentWord
+
+    ;対象機器の管理者ログインコマンド
+    strMessage = '対象機器の管理者ログインコマンドが見つかりません('
+    call readProfileInfo
+    strTergetEnableCommand = strCurrentWord
+
+    ;対象機器の管理者ログインPW
+    strMessage = '対象機器の管理者ログインPWが見つかりません('
+    call readProfileInfo
+    strTergetEnablePW = strCurrentWord
+
+    ;対象機器の管理者ログイン成功時プロンプト
+    strMessage = '対象機器の管理者ログイン成功時プロンプトが見つかりません('
+    call readProfileInfo
+    strTergetEnablePrompt = strCurrentWord
+
+    ;対象機器のログアウトコマンド
+    strMessage = '対象機器のログアウトコマンドが見つかりません('
+    call readProfileInfo
+    strTergetLogoutCommand = strCurrentWord
+
+    ;対象機器の管理者ログアウトコマンド
+    strMessage = '対象機器の管理者ログアウトコマンドが見つかりません('
+    call readProfileInfo
+    strTergetDisableCommand = strCurrentWord
+
+    ;ログインタイムアウト値
+    strMessage = 'ログインタイムアウト値が見つかりません('
+    call readProfileInfo
+    strLoginTimeout = strCurrentWord
+
+    ;コマンドタイムアウト値
+    strMessage = 'ログインタイムアウト値が見つかりません('
+    call readProfileInfo
+    strCommandTimeout = strCurrentWord
+
+    ;ログインインターバル
+    strMessage = 'ログインインターバルが見つかりません('
+    call readProfileInfo
+    strLoginInterval = strCurrentWord
+
+    ;コマンドインターバル
+    strMessage = 'コマンドインターバルが見つかりません('
+    call readProfileInfo
+    strCommandInterval = strCurrentWord
+
+    ;ツールログオープン時の待ち時間
+    strMessage = 'ツールログオープン時の待ち時間が見つかりません('
+    call readProfileInfo
+    strToolLogOpenWaitTime = strCurrentWord
+
+    ;ツールログクローズ時の待ち時間
+    strMessage = 'ツールログクローズ時の待ち時間が見つかりません('
+    call readProfileInfo
+    strToolLogCloseWaitTime = strCurrentWord
+
+;プロファイルの設定
+:PROFILE_SET
+
+    strcompare strLoginOnlyFlg '-l'
+    if result = 0 then
+        ;ログインのみ実施のログファイル名を設定
+        strOrgDevLogFileNameFormat = strDeviceLogFileNameFormat
+        strDeviceLogFileNameFormat = strValidNumber
+        strconcat strDeviceLogFileNameFormat '_LoginOnly'
+        strscan strOrgDevLogFileNameFormat DATE_RESERVED_WORD
+        if result <> 0 then
+            strconcat strDeviceLogFileNameFormat '_'
+            strconcat strDeviceLogFileNameFormat strDate
+        endif
+        strscan strOrgDevLogFileNameFormat TIME_RESERVED_WORD
+        if result <> 0 then
+            strconcat strDeviceLogFileNameFormat '_'
+            strconcat strDeviceLogFileNameFormat strTime
+        endif
+        strconcat strDeviceLogFileNameFormat '.txt'
+        iDeviceLogFileWrite = 1
+    else
+        ;実機ログファイル書き込みフラグの設定
+        strscan strDeviceLogFileNameFormat NUMBER_RESERVED_WORD
+        if result <> 0 iDeviceLogFileWrite = 1
+        strscan strDeviceLogFileNameFormat HOST_RESERVED_WORD
+        if result <> 0 iDeviceLogFileWrite = 2
+        strscan strDeviceLogFileNameFormat COMMAND_RESERVED_WORD
+        if result <> 0 iDeviceLogFileWrite = 3
+
+        ;実機ログファイル名の予約語を値に変換
+        strreplace strDeviceLogFileNameFormat 1 DATE_RESERVED_WORD strDate
+        strreplace strDeviceLogFileNameFormat 1 TIME_RESERVED_WORD strTime
+        strreplace strDeviceLogFileNameFormat 1 NUMBER_RESERVED_WORD strValidNumber
+    endif
+
+    ;踏み台サーバ数の設定
+    strcompare strServer1LoginCommand ''
+    if result = 0 then
+        iServerNumber = 0
+    else
+        strcompare strServer2LoginCommand ''
+        if result = 0 then
+            iServerNumber = 1
+        else
+            strcompare strServer3LoginCommand ''
+            if result = 0 then
+                iServerNumber = 2
+            else
+                iServerNumber = 3
+            endif
+        endif
+    endif
+
+    ;ログイン・ログアウト・モード移行コマンドのログ出力用文字列取得
+    strServer1EnableCommandLog = strServer1EnableCommand
+    strServer1LogoutCommandLog = strServer1LogoutCommand
+    strServer1DisableCommandLog = strServer1DisableCommand
+    strServer2LoginCommandLog = strServer2LoginCommand
+    strServer2EnableCommandLog = strServer2EnableCommand
+    strServer2LogoutCommandLog = strServer2LogoutCommand
+    strServer2DisableCommandLog = strServer2DisableCommand
+    strServer3LoginCommandLog = strServer3LoginCommand
+    strServer3EnableCommandLog = strServer3EnableCommand
+    strServer3LogoutCommandLog = strServer3LogoutCommand
+    strServer3DisableCommandLog = strServer3DisableCommand
+    strTergetLoginCommandLog = strTergetLoginCommand
+    strTergetEnableCommandLog = strTergetEnableCommand
+    strTergetLogoutCommandLog = strTergetLogoutCommand
+    strTergetDisableCommandLog = strTergetDisableCommand
+
+    ;ログイン・ログアウト・モード移行コマンドの予約語を値に変換
+    do
+        strreplace strServer1EnableCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strServer1LogoutCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strServer1DisableCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strServer2LoginCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strServer2EnableCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strServer2LogoutCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strServer2DisableCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strServer3LoginCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strServer3EnableCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strServer3LogoutCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strServer3DisableCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strTergetLoginCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strTergetEnableCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strTergetLogoutCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+    do
+        strreplace strTergetDisableCommand 1 CRLF_COMMAND #13#10
+    loop while result = 1
+
+    ;待ち文字列を空文字列からダミー文字列に変換
+    strcompare strServer1LoginIDMessage ''
+    if result = 0 strServer1LoginIDMessage = DUMMY_RESERVED_WORD
+    strcompare strServer1LoginPWMessage ''
+    if result = 0 strServer1LoginPWMessage = DUMMY_RESERVED_WORD
+    strcompare strServer1LoginPrompt ''
+    if result = 0 strServer1LoginPrompt = DUMMY_RESERVED_WORD
+    strcompare strServer1EnablePrompt ''
+    if result = 0 strServer1EnablePrompt = DUMMY_RESERVED_WORD
+    strcompare strServer2LoginIDMessage ''
+    if result = 0 strServer2LoginIDMessage = DUMMY_RESERVED_WORD
+    strcompare strServer2LoginPWMessage ''
+    if result = 0 strServer2LoginPWMessage = DUMMY_RESERVED_WORD
+    strcompare strServer2LoginPrompt ''
+    if result = 0 strServer2LoginPrompt = DUMMY_RESERVED_WORD
+    strcompare strServer2EnablePrompt ''
+    if result = 0 strServer2EnablePrompt = DUMMY_RESERVED_WORD
+    strcompare strServer3LoginIDMessage ''
+    if result = 0 strServer3LoginIDMessage = DUMMY_RESERVED_WORD
+    strcompare strServer3LoginPWMessage ''
+    if result = 0 strServer3LoginPWMessage = DUMMY_RESERVED_WORD
+    strcompare strServer3LoginPrompt ''
+    if result = 0 strServer3LoginPrompt = DUMMY_RESERVED_WORD
+    strcompare strServer3EnablePrompt ''
+    if result = 0 strServer3EnablePrompt = DUMMY_RESERVED_WORD
+    strcompare strTergetLoginIDMessage ''
+    if result = 0 strTergetLoginIDMessage = DUMMY_RESERVED_WORD
+    strcompare strTergetLoginPWMessage ''
+    if result = 0 strTergetLoginPWMessage = DUMMY_RESERVED_WORD
+    strcompare strTergetLoginPrompt ''
+    if result = 0 strTergetLoginPrompt = DUMMY_RESERVED_WORD
+    strcompare strTergetEnablePrompt ''
+    if result = 0 strTergetEnablePrompt = DUMMY_RESERVED_WORD
+
+    ;文字列を数字に変換
+    str2int iLoginTimeout strLoginTimeout
+    str2int iCommandTimeout strCommandTimeout
+    str2int iLoginInterval strLoginInterval
+    str2int iCommandInterval strCommandInterval
+    str2int iToolLogOpenWaitTime strToolLogOpenWaitTime
+    str2int iToolLogCloseWaitTime strToolLogCloseWaitTime
+
+    ;フォーマットの設定
+    strTergetLoginCommandFormat = strTergetLoginCommand
+    strTergetLoginPromptFormat = strTergetLoginPrompt
+    strTergetEnablePromptFormat = strTergetEnablePrompt
+
+;プロファイルのクローズ
+:PROFILE_CLOSE
+
+    fileclose fhProfile
+
+
+;-------------------------------------------------------------------------------
+; 3. リストファイルの読み込み
+;-------------------------------------------------------------------------------
+
+;リストファイルのオープン
+:LIST_FILE_OPEN
+
+    ;ログファイルの書き込み
+    filewrite fhToolLogFile 'ListFile: '
+    filesearch strListFileName
+    if result=0 then
+        strMessage = 'リストファイルが見つかりません('
+        strconcat strMessage strListFileName
+        strconcat strMessage ')'
+        messagebox strMessage strNumber
+        filewriteln fhToolLogFile strMessage
+        end
+    endif
+    fileopen fhListFile strListFileName 0
+    if fhListFile = -1 then
+        strMessage = 'リストファイルが開けません('
+        strconcat strMessage strListFileName
+        strconcat strMessage ')'
+        messagebox strMessage strNumber
+        filewriteln fhToolLogFile strMessage
+        end
+    endif
+
+    ;ログファイルの書き込み
+    filewriteln fhToolLogFile strListFileName
+    
+;-------------------------------------------------------------------------------
+; 4. 踏み台サーバのログイン
+;-------------------------------------------------------------------------------
+
+;踏み台サーバのログイン
+:SERVER1_LOGIN
+
+    timeout = iLoginTimeout
+
+    if iServerNumber >= 1 then
+        filewriteln fhToolLogFile ''
+        filewrite fhToolLogFile 'No.0 踏み台サーバ1('
+        filewrite fhToolLogFile strServer1Address
+        filewriteln fhToolLogFile ')'
+        
+        ;ログインコマンド実行
+        :SERVER1_LOGIN_COMMAND
+
+        mpause iLoginInterval
+        flushrecv
+
+        strcompare strServer1LoginCommand 'console'
+        if result = 0 then
+            strServer1LoginCommand = '/C='
+            strconcat strServer1LoginCommand strServer1ComPortNumber
+            strconcat strServer1LoginCommand ' /timeout='
+            strconcat strServer1LoginCommand strLoginTimeout
+        endif
+        strcompare strServer1LoginCommand 'telnet'
+        if result = 0 then
+            strServer1LoginCommand = strServer1Address
+            strconcat strServer1LoginCommand ':23 /nossh /T=1'
+            strconcat strServer1LoginCommand ' /timeout='
+            strconcat strServer1LoginCommand strLoginTimeout
+        endif
+        strcompare strServer1LoginCommand 'ssh'
+        if result = 0 then
+            strServer1LoginCommand = strServer1Address
+            strconcat strServer1LoginCommand ':22 /ssh /1 /auth=password /user='
+            strconcat strServer1LoginCommand strServer1LoginID
+            strconcat strServer1LoginCommand ' /passwd='
+            strconcat strServer1LoginCommand strServer1LoginPW
+            strconcat strServer1LoginCommand ' /nosecuritywarning'
+            strconcat strServer1LoginCommand ' /timeout='
+            strconcat strServer1LoginCommand strLoginTimeout
+        endif
+        strcompare strServer1LoginCommand 'ssh/password'
+        if result = 0 then
+            strServer1LoginCommand = strServer1Address
+            strconcat strServer1LoginCommand ':22 /ssh /1 /auth=password /user='
+            strconcat strServer1LoginCommand strServer1LoginID
+            strconcat strServer1LoginCommand ' /passwd='
+            strconcat strServer1LoginCommand strServer1LoginPW
+            strconcat strServer1LoginCommand ' /nosecuritywarning'
+            strconcat strServer1LoginCommand ' /timeout='
+            strconcat strServer1LoginCommand strLoginTimeout
+        endif
+        strcompare strServer1LoginCommand 'ssh/challenge'
+        if result = 0 then
+            strServer1LoginCommand = strServer1Address
+            strconcat strServer1LoginCommand ':22 /ssh /2 /auth=password /user='
+            strconcat strServer1LoginCommand strServer1LoginID
+            strconcat strServer1LoginCommand ' /passwd='
+            strconcat strServer1LoginCommand strServer1LoginPW
+            strconcat strServer1LoginCommand ' /nosecuritywarning'
+            strconcat strServer1LoginCommand ' /timeout='
+            strconcat strServer1LoginCommand strLoginTimeout
+        endif
+        strcompare strServer1LoginCommand 'ssh1'
+        if result = 0 then
+            strServer1LoginCommand = strServer1Address
+            strconcat strServer1LoginCommand ':22 /ssh /1 /auth=password /user='
+            strconcat strServer1LoginCommand strServer1LoginID
+            strconcat strServer1LoginCommand ' /passwd='
+            strconcat strServer1LoginCommand strServer1LoginPW
+            strconcat strServer1LoginCommand ' /nosecuritywarning'
+            strconcat strServer1LoginCommand ' /timeout='
+            strconcat strServer1LoginCommand strLoginTimeout
+        endif
+        strcompare strServer1LoginCommand 'ssh1/password'
+        if result = 0 then
+            strServer1LoginCommand = strServer1Address
+            strconcat strServer1LoginCommand ':22 /ssh /1 /auth=password /user='
+            strconcat strServer1LoginCommand strServer1LoginID
+            strconcat strServer1LoginCommand ' /passwd='
+            strconcat strServer1LoginCommand strServer1LoginPW
+            strconcat strServer1LoginCommand ' /nosecuritywarning'
+            strconcat strServer1LoginCommand ' /timeout='
+            strconcat strServer1LoginCommand strLoginTimeout
+        endif
+        strcompare strServer1LoginCommand 'ssh1/challenge'
+        if result = 0 then
+            strServer1LoginCommand = strServer1Address
+            strconcat strServer1LoginCommand ':22 /ssh /1 /auth=challenge /user='
+            strconcat strServer1LoginCommand strServer1LoginID
+            strconcat strServer1LoginCommand ' /passwd='
+            strconcat strServer1LoginCommand strServer1LoginPW
+            strconcat strServer1LoginCommand ' /nosecuritywarning'
+            strconcat strServer1LoginCommand ' /timeout='
+            strconcat strServer1LoginCommand strLoginTimeout
+        endif
+        strcompare strServer1LoginCommand 'ssh2'
+        if result = 0 then
+            strServer1LoginCommand = strServer1Address
+            strconcat strServer1LoginCommand ':22 /ssh /2 /auth=password /user='
+            strconcat strServer1LoginCommand strServer1LoginID
+            strconcat strServer1LoginCommand ' /passwd='
+            strconcat strServer1LoginCommand strServer1LoginPW
+            strconcat strServer1LoginCommand ' /nosecuritywarning'
+            strconcat strServer1LoginCommand ' /timeout='
+            strconcat strServer1LoginCommand strLoginTimeout
+        endif
+        strcompare strServer1LoginCommand 'ssh2/password'
+        if result = 0 then
+            strServer1LoginCommand = strServer1Address
+            strconcat strServer1LoginCommand ':22 /ssh /2 /auth=password /user='
+            strconcat strServer1LoginCommand strServer1LoginID
+            strconcat strServer1LoginCommand ' /passwd='
+            strconcat strServer1LoginCommand strServer1LoginPW
+            strconcat strServer1LoginCommand ' /nosecuritywarning'
+            strconcat strServer1LoginCommand ' /timeout='
+            strconcat strServer1LoginCommand strLoginTimeout
+        endif
+        strcompare strServer1LoginCommand 'ssh2/challenge'
+        if result = 0 then
+            strServer1LoginCommand = strServer1Address
+            strconcat strServer1LoginCommand ':22 /ssh /2 /auth=challenge /user='
+            strconcat strServer1LoginCommand strServer1LoginID
+            strconcat strServer1LoginCommand ' /passwd='
+            strconcat strServer1LoginCommand strServer1LoginPW
+            strconcat strServer1LoginCommand ' /nosecuritywarning'
+            strconcat strServer1LoginCommand ' /timeout='
+            strconcat strServer1LoginCommand strLoginTimeout
+        endif
+        do
+            mpause 10
+            testlink
+        loop while result = 2
+        iRetry = 0
+        do
+            mpause 10
+            if iRetry > 0 then
+                strMessage = 'コネクションタイムアウト('
+                strconcat strMessage strServer1LoginCommand
+                strconcat strMessage ')'
+                messagebox strMessage strNumber
+                strMessage = 'ログインを再度実行しますか？'
+                yesnobox strMessage strNumber
+                if result = 0 then
+                    strMessage = 'コネクションタイムアウト('
+                    strconcat strMessage strServer1LoginCommand
+                    strconcat strMessage ')'
+                    filewrite fhToolLogFile ' NG: '
+                    filewriteln fhToolLogFile strMessage
+                    end
+                endif
+            endif
+            iRetry = iRetry + 1
+            connect strServer1LoginCommand
+        loop while result <> 2
+
+; --- SSH fingerprint 確認対応（踏み台サーバ1） ---
+; connect 成功直後に fingerprint 確認が出る場合があるため検出して yes を送る
+mpause iCommandInterval
+wait FINGERPRINT_PROMPT strServer1LoginIDMessage strServer1LoginPWMessage strServer1LoginPrompt strServer1EnablePrompt
+flushrecv
+if result = 1 then
+    mpause iCommandInterval
+    sendln 'yes'
+    filewrite fhToolLogFile ' OK: SSH fingerprint accepted('
+    filewriteln fhToolLogFile strServer1Address
+    mpause iCommandInterval
+    ; fingerprint に対して yes を送った後、改めてログイン系のプロンプトを待つ
+    wait strServer1LoginIDMessage strServer1LoginPWMessage strServer1LoginPrompt strServer1EnablePrompt
+    flushrecv
+endif
+; --- ここまで ---
+
+        filewrite fhToolLogFile ' OK: ログインコマンド実行('
+        filewrite fhToolLogFile strServer1LoginCommand
+        filewriteln fhToolLogFile ')'
+
+        ;ログインID確認メッセージ
+        :SERVER1_LOGIN_ID
+
+        mpause iLoginInterval
+        testlink
+        if result <> 2 then
+            strMessage = 'コネクションが接続された直後に切断されました。'#13#10
+            strconcat strMessage 'コネクション数が上限値に達している可能性があります。'
+            messagebox strMessage strNumber
+            strMessage = 'コネクションタイムアウト('
+            strconcat strMessage strServer1LoginCommand
+            strconcat strMessage ')'
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        endif
+        wait strServer1LoginIDMessage strServer1LoginPWMessage strServer1LoginPrompt strServer1EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLoginError = 1
+            strMessage = 'ログインID確認メッセージ待ちタイムアウト('
+            strconcat strMessage strServer1LoginCommand
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        elseif result = 1 then
+            mpause iCommandInterval
+            sendln strServer1LoginID
+            filewrite fhToolLogFile ' OK: ログインID確認メッセージ表示('
+            filewrite fhToolLogFile strServer1LoginIDMessage
+            filewriteln fhToolLogFile ')'
+            goto SERVER1_LOGIN_PW
+        elseif result = 2 then
+            mpause iCommandInterval
+            sendln strServer1LoginPW
+            filewrite fhToolLogFile ' OK: ログインPW確認メッセージ表示('
+            filewrite fhToolLogFile strServer1LoginPWMessage
+            filewriteln fhToolLogFile ')'
+            goto SERVER1_LOGIN_GUEST
+        elseif result = 3 then
+            filewrite fhToolLogFile ' OK: ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer1LoginPrompt
+            filewriteln fhToolLogFile ')'
+            strServer1CurrentPrompt = strServer1LoginPrompt
+            strcompare strServer1EnableCommand ''
+            if result = 0 then
+                goto SERVER1_LOGIN_END
+            else
+                mpause iCommandInterval
+                sendln strServer1EnableCommand
+                mpause iCommandInterval
+                sendln strServer1EnablePW
+                filewrite fhToolLogFile ' OK: 管理者ログインコマンド実行('
+                filewrite fhToolLogFile strServer1EnableCommandLog
+                filewriteln fhToolLogFile ')'
+                goto SERVER1_LOGIN_ADMINISTRATOR
+            endif
+        elseif result = 4 then
+            filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer1EnablePrompt
+            filewriteln fhToolLogFile ')'
+            strServer1CurrentPrompt = strServer1EnablePrompt
+            goto SERVER1_LOGIN_END
+        endif
+
+        ;ログインPW確認メッセージ
+        :SERVER1_LOGIN_PW
+
+        mpause iCommandInterval
+        wait strServer1LoginPWMessage strServer1LoginPrompt strServer1EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLoginError = 1
+            strMessage = 'ログインPW確認メッセージ待ちタイムアウト('
+            strconcat strMessage strServer1LoginCommand
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        elseif result = 1 then
+            mpause iCommandInterval
+            sendln strServer1LoginPW
+            filewrite fhToolLogFile ' OK: ログインPW確認メッセージ表示('
+            filewrite fhToolLogFile strServer1LoginPWMessage
+            filewriteln fhToolLogFile ')'
+            goto SERVER1_LOGIN_GUEST
+        elseif result = 2 then
+            filewrite fhToolLogFile ' OK: ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer1LoginPrompt
+            filewriteln fhToolLogFile ')'
+            strServer1CurrentPrompt = strServer1LoginPrompt
+            strcompare strServer1EnableCommand ''
+            if result = 0 then
+                goto SERVER1_LOGIN_END
+            else
+                mpause iCommandInterval
+                sendln strServer1EnableCommand
+                mpause iCommandInterval
+                sendln strServer1EnablePW
+                filewrite fhToolLogFile ' OK: 管理者ログインコマンド実行('
+                filewrite fhToolLogFile strServer1EnableCommandLog
+                filewriteln fhToolLogFile ')'
+                goto SERVER1_LOGIN_ADMINISTRATOR
+            endif
+        elseif result = 3 then
+            filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer1EnablePrompt
+            filewriteln fhToolLogFile ')'
+            strServer1CurrentPrompt = strServer1EnablePrompt
+            goto SERVER1_LOGIN_END
+        endif
+
+        ;ログイン成功時プロンプト
+        :SERVER1_LOGIN_GUEST
+        
+        mpause iCommandInterval
+        wait strServer1LoginPrompt strServer1EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLoginError = 1
+            strMessage = 'ログイン成功時プロンプト待ちタイムアウト('
+            strconcat strMessage strServer1LoginCommand
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        elseif result = 1 then
+            filewrite fhToolLogFile ' OK: ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer1LoginPrompt
+            filewriteln fhToolLogFile ')'
+            strServer1CurrentPrompt = strServer1LoginPrompt
+            strcompare strServer1EnableCommand ''
+            if result = 0 then
+                goto SERVER1_LOGIN_END
+            else
+                mpause iCommandInterval
+                sendln strServer1EnableCommand
+                mpause iCommandInterval
+                sendln strServer1EnablePW
+                filewrite fhToolLogFile ' OK: 管理者ログインコマンド実行('
+                filewrite fhToolLogFile strServer1EnableCommandLog
+                filewriteln fhToolLogFile ')'
+                goto SERVER1_LOGIN_ADMINISTRATOR
+            endif
+        elseif result = 2 then
+            filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer1EnablePrompt
+            filewriteln fhToolLogFile ')'
+            strServer1CurrentPrompt = strServer1EnablePrompt
+            goto SERVER1_LOGIN_END
+        endif
+
+        ;管理者ログイン成功時プロンプト
+        :SERVER1_LOGIN_ADMINISTRATOR
+
+        mpause iCommandInterval
+        wait strServer1EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLoginError = 1
+            strMessage = '管理者ログイン成功時プロンプト待ちタイムアウト('
+            strconcat strMessage strServer1LoginCommand
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        elseif result = 1 then
+            filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer1EnablePrompt
+            filewriteln fhToolLogFile ')'
+            strServer1CurrentPrompt = strServer1EnablePrompt
+            goto SERVER1_LOGIN_END
+        endif
+
+        ;ログイン終了
+        :SERVER1_LOGIN_END
+        
+        if iLoginError = 1 then
+            iLoginError = 0
+            end
+        endif
+
+    endif
+
+    if iServerNumber >= 2 then
+        filewriteln fhToolLogFile ''
+        filewrite fhToolLogFile 'No.0 踏み台サーバ2('
+        filewrite fhToolLogFile strServer2Address
+        filewriteln fhToolLogFile ')'
+        
+        ;ログインコマンド実行
+        :SERVER2_LOGIN_COMMAND
+
+        mpause iLoginInterval
+        flushrecv
+
+        strreplace strServer2LoginCommand 1 ADDRESS_RESERVED_WORD strServer2Address
+        strreplace strServer2LoginCommandLog 1 ADDRESS_RESERVED_WORD strServer2Address
+        mpause iCommandInterval
+        sendln strServer2LoginCommand
+        filewrite fhToolLogFile ' OK: ログインコマンド実行('
+        filewrite fhToolLogFile strServer2LoginCommandLog
+        filewriteln fhToolLogFile ')'
+
+        ;ログインID確認メッセージ
+        :SERVER2_LOGIN_ID
+
+        mpause iLoginInterval
+        testlink
+        if result <> 2 then
+            strMessage = 'コネクションが接続された直後に切断されました。'#13#10
+            strconcat strMessage 'コネクション数が上限値に達している可能性があります。'
+            messagebox strMessage strNumber
+            strMessage = 'コネクションタイムアウト('
+            strconcat strMessage strServer2LoginCommandLog
+            strconcat strMessage ')'
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        endif
+        wait strServer2LoginIDMessage strServer2LoginPWMessage strServer2LoginPrompt strServer2EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLoginError = 1
+            strMessage = 'ログインID確認メッセージ待ちタイムアウト('
+            strconcat strMessage strServer2LoginCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        elseif result = 1 then
+            mpause iCommandInterval
+            sendln strServer2LoginID
+            filewrite fhToolLogFile ' OK: ログインID確認メッセージ表示('
+            filewrite fhToolLogFile strServer2LoginIDMessage
+            filewriteln fhToolLogFile ')'
+            goto SERVER2_LOGIN_PW
+        elseif result = 2 then
+            mpause iCommandInterval
+            sendln strServer2LoginPW
+            filewrite fhToolLogFile ' OK: ログインPW確認メッセージ表示('
+            filewrite fhToolLogFile strServer2LoginPWMessage
+            filewriteln fhToolLogFile ')'
+            goto SERVER2_LOGIN_GUEST
+        elseif result = 3 then
+            filewrite fhToolLogFile ' OK: ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer2LoginPrompt
+            filewriteln fhToolLogFile ')'
+            strServer2CurrentPrompt = strServer2LoginPrompt
+            strcompare strServer2EnableCommand ''
+            if result = 0 then
+                goto SERVER2_LOGIN_END
+            else
+                mpause iCommandInterval
+                sendln strServer2EnableCommand
+                mpause iCommandInterval
+                sendln strServer2EnablePW
+                filewrite fhToolLogFile ' OK: 管理者ログインコマンド実行('
+                filewrite fhToolLogFile strServer2EnableCommandLog
+                filewriteln fhToolLogFile ')'
+                goto SERVER2_LOGIN_ADMINISTRATOR
+            endif
+        elseif result = 4 then
+            filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer2EnablePrompt
+            filewriteln fhToolLogFile ')'
+            strServer2CurrentPrompt = strServer2EnablePrompt
+            goto SERVER2_LOGIN_END
+        endif
+
+        ;ログインPW確認メッセージ
+        :SERVER2_LOGIN_PW
+
+        mpause iCommandInterval
+        wait strServer2LoginPWMessage strServer2LoginPrompt strServer2EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLoginError = 1
+            strMessage = 'ログインPW確認メッセージ待ちタイムアウト('
+            strconcat strMessage strServer2LoginCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        elseif result = 1 then
+            mpause iCommandInterval
+            sendln strServer2LoginPW
+            filewrite fhToolLogFile ' OK: ログインPW確認メッセージ表示('
+            filewrite fhToolLogFile strServer2LoginPWMessage
+            filewriteln fhToolLogFile ')'
+            goto SERVER2_LOGIN_GUEST
+        elseif result = 2 then
+            filewrite fhToolLogFile ' OK: ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer2LoginPrompt
+            filewriteln fhToolLogFile ')'
+            strServer2CurrentPrompt = strServer2LoginPrompt
+            strcompare strServer2EnableCommand ''
+            if result = 0 then
+                goto SERVER2_LOGIN_END
+            else
+                mpause iCommandInterval
+                sendln strServer2EnableCommand
+                mpause iCommandInterval
+                sendln strServer2EnablePW
+                filewrite fhToolLogFile ' OK: 管理者ログインコマンド実行('
+                filewrite fhToolLogFile strServer2EnableCommandLog
+                filewriteln fhToolLogFile ')'
+                goto SERVER2_LOGIN_ADMINISTRATOR
+            endif
+        elseif result = 3 then
+            filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer2EnablePrompt
+            filewriteln fhToolLogFile ')'
+            strServer2CurrentPrompt = strServer2EnablePrompt
+            goto SERVER2_LOGIN_END
+        endif
+
+        ;ログイン成功時プロンプト
+        :SERVER2_LOGIN_GUEST
+        
+        mpause iCommandInterval
+        wait strServer2LoginPrompt strServer2EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLoginError = 1
+            strMessage = 'ログイン成功時プロンプト待ちタイムアウト('
+            strconcat strMessage strServer2LoginCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        elseif result = 1 then
+            filewrite fhToolLogFile ' OK: ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer2LoginPrompt
+            filewriteln fhToolLogFile ')'
+            strServer2CurrentPrompt = strServer2LoginPrompt
+            strcompare strServer2EnableCommand ''
+            if result = 0 then
+                goto SERVER2_LOGIN_END
+            else
+                mpause iCommandInterval
+                sendln strServer2EnableCommand
+                mpause iCommandInterval
+                sendln strServer2EnablePW
+                filewrite fhToolLogFile ' OK: 管理者ログインコマンド実行('
+                filewrite fhToolLogFile strServer2EnableCommandLog
+                filewriteln fhToolLogFile ')'
+                goto SERVER2_LOGIN_ADMINISTRATOR
+            endif
+        elseif result = 2 then
+            filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer2EnablePrompt
+            filewriteln fhToolLogFile ')'
+            strServer2CurrentPrompt = strServer2EnablePrompt
+            goto SERVER2_LOGIN_END
+        endif
+
+        ;管理者ログイン成功時プロンプト
+        :SERVER2_LOGIN_ADMINISTRATOR
+
+        mpause iCommandInterval
+        wait strServer2EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLoginError = 1
+            strMessage = '管理者ログイン成功時プロンプト待ちタイムアウト('
+            strconcat strMessage strServer2LoginCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        elseif result = 1 then
+            filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer2EnablePrompt
+            filewriteln fhToolLogFile ')'
+            strServer2CurrentPrompt = strServer2EnablePrompt
+            goto SERVER2_LOGIN_END
+        endif
+
+        ;ログイン終了
+        :SERVER2_LOGIN_END
+        
+        if iLoginError = 1 then
+            iLoginError = 0
+            end
+        endif
+
+    endif
+
+    if iServerNumber >= 3 then
+        filewriteln fhToolLogFile ''
+        filewrite fhToolLogFile 'No.0 踏み台サーバ3('
+        filewrite fhToolLogFile strServer3Address
+        filewriteln fhToolLogFile ')'
+        
+        ;ログインコマンド実行
+        :SERVER3_LOGIN_COMMAND
+
+        mpause iLoginInterval
+        flushrecv
+
+        strreplace strServer3LoginCommand 1 ADDRESS_RESERVED_WORD strServer3Address
+        strreplace strServer3LoginCommandLog 1 ADDRESS_RESERVED_WORD strServer3Address
+        mpause iCommandInterval
+        sendln strServer3LoginCommand
+        filewrite fhToolLogFile ' OK: ログインコマンド実行('
+        filewrite fhToolLogFile strServer3LoginCommandLog
+        filewriteln fhToolLogFile ')'
+
+        ;ログインID確認メッセージ
+        :SERVER3_LOGIN_ID
+
+        mpause iLoginInterval
+        testlink
+        if result <> 2 then
+            strMessage = 'コネクションが接続された直後に切断されました。'#13#10
+            strconcat strMessage 'コネクション数が上限値に達している可能性があります。'
+            messagebox strMessage strNumber
+            strMessage = 'コネクションタイムアウト('
+            strconcat strMessage strServer3LoginCommandLog
+            strconcat strMessage ')'
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        endif
+        wait strServer3LoginIDMessage strServer3LoginPWMessage strServer3LoginPrompt strServer3EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLoginError = 1
+            strMessage = 'ログインID確認メッセージ待ちタイムアウト('
+            strconcat strMessage strServer3LoginCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        elseif result = 1 then
+            mpause iCommandInterval
+            sendln strServer3LoginID
+            filewrite fhToolLogFile ' OK: ログインID確認メッセージ表示('
+            filewrite fhToolLogFile strServer3LoginIDMessage
+            filewriteln fhToolLogFile ')'
+            goto SERVER3_LOGIN_PW
+        elseif result = 2 then
+            mpause iCommandInterval
+            sendln strServer3LoginPW
+            filewrite fhToolLogFile ' OK: ログインPW確認メッセージ表示('
+            filewrite fhToolLogFile strServer3LoginPWMessage
+            filewriteln fhToolLogFile ')'
+            goto SERVER3_LOGIN_GUEST
+        elseif result = 3 then
+            filewrite fhToolLogFile ' OK: ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer3LoginPrompt
+            filewriteln fhToolLogFile ')'
+            strServer3CurrentPrompt = strServer3LoginPrompt
+            strcompare strServer3EnableCommand ''
+            if result = 0 then
+                goto SERVER3_LOGIN_END
+            else
+                mpause iCommandInterval
+                sendln strServer3EnableCommand
+                mpause iCommandInterval
+                sendln strServer3EnablePW
+                filewrite fhToolLogFile ' OK: 管理者ログインコマンド実行('
+                filewrite fhToolLogFile strServer3EnableCommandLog
+                filewriteln fhToolLogFile ')'
+                goto SERVER3_LOGIN_ADMINISTRATOR
+            endif
+        elseif result = 4 then
+            filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer3EnablePrompt
+            filewriteln fhToolLogFile ')'
+            strServer3CurrentPrompt = strServer3EnablePrompt
+            goto SERVER3_LOGIN_END
+        endif
+
+        ;ログインPW確認メッセージ
+        :SERVER3_LOGIN_PW
+
+        mpause iCommandInterval
+        wait strServer3LoginPWMessage strServer3LoginPrompt strServer3EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLoginError = 1
+            strMessage = 'ログインPW確認メッセージ待ちタイムアウト('
+            strconcat strMessage strServer3LoginCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        elseif result = 1 then
+            mpause iCommandInterval
+            sendln strServer3LoginPW
+            filewrite fhToolLogFile ' OK: ログインPW確認メッセージ表示('
+            filewrite fhToolLogFile strServer3LoginPWMessage
+            filewriteln fhToolLogFile ')'
+            goto SERVER3_LOGIN_GUEST
+        elseif result = 2 then
+            filewrite fhToolLogFile ' OK: ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer3LoginPrompt
+            filewriteln fhToolLogFile ')'
+            strServer3CurrentPrompt = strServer3LoginPrompt
+            strcompare strServer3EnableCommand ''
+            if result = 0 then
+                goto SERVER3_LOGIN_END
+            else
+                mpause iCommandInterval
+                sendln strServer3EnableCommand
+                mpause iCommandInterval
+                sendln strServer3EnablePW
+                filewrite fhToolLogFile ' OK: 管理者ログインコマンド実行('
+                filewrite fhToolLogFile strServer3EnableCommandLog
+                filewriteln fhToolLogFile ')'
+                goto SERVER3_LOGIN_ADMINISTRATOR
+            endif
+        elseif result = 3 then
+            filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer3EnablePrompt
+            filewriteln fhToolLogFile ')'
+            strServer3CurrentPrompt = strServer3EnablePrompt
+            goto SERVER3_LOGIN_END
+        endif
+
+        ;ログイン成功時プロンプト
+        :SERVER3_LOGIN_GUEST
+        
+        mpause iCommandInterval
+        wait strServer3LoginPrompt strServer3EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLoginError = 1
+            strMessage = 'ログイン成功時プロンプト待ちタイムアウト('
+            strconcat strMessage strServer3LoginCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        elseif result = 1 then
+            filewrite fhToolLogFile ' OK: ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer3LoginPrompt
+            filewriteln fhToolLogFile ')'
+            strServer3CurrentPrompt = strServer3LoginPrompt
+            strcompare strServer3EnableCommand ''
+            if result = 0 then
+                goto SERVER3_LOGIN_END
+            else
+                mpause iCommandInterval
+                sendln strServer3EnableCommand
+                mpause iCommandInterval
+                sendln strServer3EnablePW
+                filewrite fhToolLogFile ' OK: 管理者ログインコマンド実行('
+                filewrite fhToolLogFile strServer3EnableCommandLog
+                filewriteln fhToolLogFile ')'
+                goto SERVER3_LOGIN_ADMINISTRATOR
+            endif
+        elseif result = 2 then
+            filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer3EnablePrompt
+            filewriteln fhToolLogFile ')'
+            strServer3CurrentPrompt = strServer3EnablePrompt
+            goto SERVER3_LOGIN_END
+        endif
+
+        ;管理者ログイン成功時プロンプト
+        :SERVER3_LOGIN_ADMINISTRATOR
+
+        mpause iCommandInterval
+        wait strServer3EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLoginError = 1
+            strMessage = '管理者ログイン成功時プロンプト待ちタイムアウト('
+            strconcat strMessage strServer3LoginCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        elseif result = 1 then
+            filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+            filewrite fhToolLogFile strServer3EnablePrompt
+            filewriteln fhToolLogFile ')'
+            strServer3CurrentPrompt = strServer3EnablePrompt
+            goto SERVER3_LOGIN_END
+        endif
+
+        ;ログイン終了
+        :SERVER3_LOGIN_END
+        
+        if iLoginError = 1 then
+            iLoginError = 0
+            end
+        endif
+    endif
+
+    ;実機ログファイル（項番単位）オープン
+    if iServerNumber >= 1 then
+        if iDeviceLogFileWrite = 1 then
+            mpause iToolLogOpenWaitTime
+            strDeviceLogFileName = strDeviceLogFileNameFormat
+            call openDeviceLogFile
+        endif
+    endif
+
+;-------------------------------------------------------------------------------
+; 5. 対象機器のログイン
+;-------------------------------------------------------------------------------
+
+;リストファイルの読み込み
+:LIST_FILE_READ
+
+    ;コネクション状態確認
+    do
+        if iServerNumber = 0 then
+            testlink
+            if result <> 2 then
+                break
+            endif
+            strMessage = 'コネクションが接続されています。'#13#10
+            strconcat strMessage '手動にてコネクションが切断された状態にしてください。'
+            messagebox strMessage strNumber
+        else
+            mpause iCommandInterval
+            sendln ''
+            mpause iCommandInterval
+            if iServerNumber = 1 wait strServer1CurrentPrompt
+            if iServerNumber = 2 wait strServer2CurrentPrompt
+            if iServerNumber = 3 wait strServer3CurrentPrompt
+            flushrecv
+            if result = 1 then
+                break
+            endif
+            strMessage = '踏み台サーバのプロンプトが正しく表示されていません。'#13#10
+            strconcat strMessage '手動にて踏み台サーバのプロンプトが正しく表示された状態にしてください。'
+            messagebox strMessage strNumber
+        endif
+        strMessage = 'ツール実行を継続しますか？'
+        yesnobox strMessage strNumber
+        if result = 0 then
+            end
+        endif
+    loop
+
+    ;行読み込み
+    filereadln fhListFile strCurrentLine
+    if result = 1 goto SERVER_LOGOUT
+
+    ;コマンドが'#'で始まる場合
+    strscan strCurrentLine '#'
+    if result = 1 then
+        filewrite fhToolLogFile ' OK: スキップ実行(#)'
+        goto LIST_FILE_READ
+    endif
+
+;対象機器のホスト名の取得
+:TERGET_HOST
+
+    call getListFileWord
+    if result = 0 then
+        goto LIST_FILE_READ
+    endif
+    strCurrentHost = strCurrentWord
+
+    ;ログの書き込み
+    iCurrentHostNumber = iCurrentHostNumber + 1
+    int2str strCurrentHostNumber iCurrentHostNumber
+    filewriteln fhToolLogFile ''
+    filewrite fhToolLogFile 'No.'
+    filewrite fhToolLogFile strCurrentHostNumber
+    filewrite fhToolLogFile ' '
+    filewrite fhToolLogFile strCurrentHost
+
+;対象機器のIPアドレスの取得
+:TERGET_ADDRESS
+
+    call getListFileWord
+    if result = 0 then
+        int2str strCurrentLineNumber iCurrentLineNumber
+        strMessage = 'IPアドレスが見つかりません('
+        strconcat strMessage strCurrentLineNumber
+        strconcat strMessage '行目)'
+        messagebox strMessage strNumber
+        filewriteln fhToolLogFile strMessage
+        goto LIST_FILE_READ
+    endif
+    strCurrentAddress = strCurrentWord
+
+    ;ログの書き込み
+    filewrite fhToolLogFile '('
+    filewrite fhToolLogFile strCurrentAddress
+    filewriteln fhToolLogFile ')'
+
+;対象機器のログイン
+:TERGET_LOGIN
+
+    timeout = iLoginTimeout
+
+    ;ログインコマンド実行
+    :TERGET_LOGIN_COMMAND
+
+    mpause iLoginInterval
+    flushrecv
+        
+    strTergetLoginCommand = strTergetLoginCommandFormat
+    strTergetLoginPrompt = strTergetLoginPromptFormat
+    strTergetEnablePrompt = strTergetEnablePromptFormat
+    if iServerNumber = 0 then
+        strcompare strTergetLoginCommand 'console'
+        if result = 0 then
+            strTergetLoginCommand = '/C='
+            strconcat strTergetLoginCommand strTergetComPortNumber
+        endif
+        strcompare strTergetLoginCommand 'telnet'
+        if result = 0 then
+            strTergetLoginCommand = strCurrentAddress
+            strconcat strTergetLoginCommand ':23 /nossh /T=1'
+            strconcat strTergetLoginCommand ' /timeout='
+            strconcat strTergetLoginCommand strLoginTimeout
+        endif
+        strcompare strTergetLoginCommand 'ssh'
+        if result = 0 then
+            strTergetLoginCommand = strCurrentAddress
+            strconcat strTergetLoginCommand ':22 /ssh /1 /auth=password /user='
+            strconcat strTergetLoginCommand strTergetLoginID
+            strconcat strTergetLoginCommand ' /passwd='
+            strconcat strTergetLoginCommand strTergetLoginPW
+            strconcat strTergetLoginCommand ' /nosecuritywarning'
+            strconcat strTergetLoginCommand ' /timeout='
+            strconcat strTergetLoginCommand strLoginTimeout
+        endif
+        strcompare strTergetLoginCommand 'ssh/password'
+        if result = 0 then
+            strTergetLoginCommand = strCurrentAddress
+            strconcat strTergetLoginCommand ':22 /ssh /1 /auth=password /user='
+            strconcat strTergetLoginCommand strTergetLoginID
+            strconcat strTergetLoginCommand ' /passwd='
+            strconcat strTergetLoginCommand strTergetLoginPW
+            strconcat strTergetLoginCommand ' /nosecuritywarning'
+            strconcat strTergetLoginCommand ' /timeout='
+            strconcat strTergetLoginCommand strLoginTimeout
+        endif
+        strcompare strTergetLoginCommand 'ssh/challenge'
+        if result = 0 then
+            strTergetLoginCommand = strCurrentAddress
+            strconcat strTergetLoginCommand ':22 /ssh /2 /auth=password /user='
+            strconcat strTergetLoginCommand strTergetLoginID
+            strconcat strTergetLoginCommand ' /passwd='
+            strconcat strTergetLoginCommand strTergetLoginPW
+            strconcat strTergetLoginCommand ' /nosecuritywarning'
+            strconcat strTergetLoginCommand ' /timeout='
+            strconcat strTergetLoginCommand strLoginTimeout
+        endif
+        strcompare strTergetLoginCommand 'ssh1'
+        if result = 0 then
+            strTergetLoginCommand = strCurrentAddress
+            strconcat strTergetLoginCommand ':22 /ssh /1 /auth=password /user='
+            strconcat strTergetLoginCommand strTergetLoginID
+            strconcat strTergetLoginCommand ' /passwd='
+            strconcat strTergetLoginCommand strTergetLoginPW
+            strconcat strTergetLoginCommand ' /nosecuritywarning'
+            strconcat strTergetLoginCommand ' /timeout='
+            strconcat strTergetLoginCommand strLoginTimeout
+        endif
+        strcompare strTergetLoginCommand 'ssh1/password'
+        if result = 0 then
+            strTergetLoginCommand = strCurrentAddress
+            strconcat strTergetLoginCommand ':22 /ssh /1 /auth=password /user='
+            strconcat strTergetLoginCommand strTergetLoginID
+            strconcat strTergetLoginCommand ' /passwd='
+            strconcat strTergetLoginCommand strTergetLoginPW
+            strconcat strTergetLoginCommand ' /nosecuritywarning'
+            strconcat strTergetLoginCommand ' /timeout='
+            strconcat strTergetLoginCommand strLoginTimeout
+        endif
+        strcompare strTergetLoginCommand 'ssh1/challenge'
+        if result = 0 then
+            strTergetLoginCommand = strCurrentAddress
+            strconcat strTergetLoginCommand ':22 /ssh /1 /auth=challenge /user='
+            strconcat strTergetLoginCommand strTergetLoginID
+            strconcat strTergetLoginCommand ' /passwd='
+            strconcat strTergetLoginCommand strTergetLoginPW
+            strconcat strTergetLoginCommand ' /nosecuritywarning'
+            strconcat strTergetLoginCommand ' /timeout='
+            strconcat strTergetLoginCommand strLoginTimeout
+        endif
+        strcompare strTergetLoginCommand 'ssh2'
+        if result = 0 then
+            strTergetLoginCommand = strCurrentAddress
+            strconcat strTergetLoginCommand ':22 /ssh /2 /auth=password /user='
+            strconcat strTergetLoginCommand strTergetLoginID
+            strconcat strTergetLoginCommand ' /passwd='
+            strconcat strTergetLoginCommand strTergetLoginPW
+            strconcat strTergetLoginCommand ' /nosecuritywarning'
+            strconcat strTergetLoginCommand ' /timeout='
+            strconcat strTergetLoginCommand strLoginTimeout
+        endif
+        strcompare strTergetLoginCommand 'ssh2/password'
+        if result = 0 then
+            strTergetLoginCommand = strCurrentAddress
+            strconcat strTergetLoginCommand ':22 /ssh /2 /auth=password /user='
+            strconcat strTergetLoginCommand strTergetLoginID
+            strconcat strTergetLoginCommand ' /passwd='
+            strconcat strTergetLoginCommand strTergetLoginPW
+            strconcat strTergetLoginCommand ' /nosecuritywarning'
+            strconcat strTergetLoginCommand ' /timeout='
+            strconcat strTergetLoginCommand strLoginTimeout
+        endif
+        strcompare strTergetLoginCommand 'ssh2/challenge'
+        if result = 0 then
+            strTergetLoginCommand = strCurrentAddress
+            strconcat strTergetLoginCommand ':22 /ssh /2 /auth=challenge /user='
+            strconcat strTergetLoginCommand strTergetLoginID
+            strconcat strTergetLoginCommand ' /passwd='
+            strconcat strTergetLoginCommand strTergetLoginPW
+            strconcat strTergetLoginCommand ' /nosecuritywarning'
+            strconcat strTergetLoginCommand ' /timeout='
+            strconcat strTergetLoginCommand strLoginTimeout
+        endif
+        do
+            mpause 10
+            testlink
+        loop while result = 2
+        iRetry = 0
+        do
+            mpause 10
+            if iRetry > 0 then
+                strMessage = 'コネクションタイムアウト('
+                strconcat strMessage strTergetLoginCommandLog
+                strconcat strMessage ')'
+                messagebox strMessage strNumber
+                strMessage = 'ログインを再度実行しますか？'
+                yesnobox strMessage strNumber
+                if result = 0 then
+                    strMessage = 'コネクションタイムアウト('
+                    strconcat strMessage strTergetLoginCommandLog
+                    strconcat strMessage ')'
+                    filewrite fhToolLogFile ' NG: '
+                    filewriteln fhToolLogFile strMessage
+                    strMessage = 'ツール実行を継続しますか？'
+                    yesnobox strMessage strNumber
+                    if result = 0 then
+                        end
+                    endif
+                    goto LIST_FILE_READ
+                endif
+            endif
+            iRetry = iRetry + 1
+            connect strTergetLoginCommand
+        loop while result <> 2
+
+; --- SSH fingerprint 確認対応（対象機器） ---
+mpause iCommandInterval
+wait FINGERPRINT_PROMPT strTergetLoginIDMessage strTergetLoginPWMessage strTergetLoginPrompt strTergetEnablePrompt
+flushrecv
+if result = 1 then
+    mpause iCommandInterval
+    sendln 'yes'
+    filewrite fhToolLogFile ' OK: SSH fingerprint accepted('
+    filewriteln fhToolLogFile strCurrentAddress
+    mpause iCommandInterval
+    ; yes を送った後、改めてログイン系のプロンプトを待つ
+    wait strTergetLoginIDMessage strTergetLoginPWMessage strTergetLoginPrompt strTergetEnablePrompt
+    flushrecv
+endif
+; --- ここまで ---
+
+    else
+        strreplace strTergetLoginCommand 1 ADDRESS_RESERVED_WORD strCurrentAddress
+        strreplace strTergetLoginCommand 1 HOST_RESERVED_WORD strCurrentHost
+        strreplace strTergetLoginCommandLog 1 ADDRESS_RESERVED_WORD strCurrentAddress
+        strreplace strTergetLoginCommandLog 1 HOST_RESERVED_WORD strCurrentHost
+        mpause iCommandInterval
+        sendln strTergetLoginCommand
+    endif
+    strreplace strTergetLoginPrompt 1 HOST_RESERVED_WORD strCurrentHost
+    strreplace strTergetEnablePrompt 1 HOST_RESERVED_WORD strCurrentHost
+    filewrite fhToolLogFile ' OK: ログインコマンド実行('
+    filewrite fhToolLogFile strTergetLoginCommand
+    filewriteln fhToolLogFile ')'
+
+    ;ログインID確認メッセージ
+    :TERGET_LOGIN_ID
+
+    mpause iLoginInterval
+    testlink
+    if result <> 2 then
+        strMessage = 'コネクションが接続された直後に切断されました。'#13#10
+        strconcat strMessage 'コネクション数が上限値に達している可能性があります。'
+        messagebox strMessage strNumber
+        strMessage = 'コネクションタイムアウト('
+        strconcat strMessage strServer1LoginCommand
+        strconcat strMessage ')'
+        filewrite fhToolLogFile ' NG: '
+        filewriteln fhToolLogFile strMessage
+        strMessage = 'ツール実行を継続しますか？'
+        yesnobox strMessage strNumber
+        if result = 0 then
+            end
+        endif
+        goto LIST_FILE_READ
+    endif
+    wait strTergetLoginIDMessage strTergetLoginPWMessage strTergetLoginPrompt strTergetEnablePrompt
+    flushrecv
+    if result = 0 then
+        iLoginError = 1
+        strMessage = 'ログインID確認メッセージ待ちタイムアウト('
+        strconcat strMessage strTergetLoginCommandLog
+        strconcat strMessage ')'
+        messagebox strMessage strNumber
+        filewrite fhToolLogFile ' NG: '
+        filewriteln fhToolLogFile strMessage
+        do
+            strMessage = 'ツール実行を継続しますか？'
+            yesnobox strMessage strNumber
+            if result = 0 then
+                end
+            endif
+            if iServerNumber = 0 then
+                testlink
+                if result <> 2 then
+                    break
+                endif
+                strMessage = 'コネクションが接続されています。'#13#10
+                strconcat strMessage '手動にてコネクションが切断された状態にしてください。'
+                messagebox strMessage strNumber
+            else
+                mpause iCommandInterval
+                sendln ''
+                mpause iCommandInterval
+                if iServerNumber = 1 wait strServer1CurrentPrompt
+                if iServerNumber = 2 wait strServer2CurrentPrompt
+                if iServerNumber = 3 wait strServer3CurrentPrompt
+                flushrecv
+                if result = 1 then
+                    break
+                endif
+                strMessage = '踏み台サーバのプロンプトが正しく表示されていません。'#13#10
+                strconcat strMessage '手動にて踏み台サーバのプロンプトが正しく表示された状態にしたください'
+                messagebox strMessage strNumber
+            endif
+        loop
+        goto TERGET_LOGIN_END
+    elseif result = 1 then
+        mpause iCommandInterval
+        sendln strTergetLoginID
+        filewrite fhToolLogFile ' OK: ログインID確認メッセージ表示('
+        filewrite fhToolLogFile strTergetLoginIDMessage
+        filewriteln fhToolLogFile ')'
+        goto TERGET_LOGIN_PW
+    elseif result = 2 then
+        mpause iCommandInterval
+        sendln strTergetLoginPW
+        filewrite fhToolLogFile ' OK: ログインPW確認メッセージ表示('
+        filewrite fhToolLogFile strTergetLoginPWMessage
+        filewriteln fhToolLogFile ')'
+        goto TERGET_LOGIN_GUEST
+    elseif result = 3 then
+        filewrite fhToolLogFile ' OK: ログイン成功時プロンプト表示('
+        filewrite fhToolLogFile strTergetLoginPrompt
+        filewriteln fhToolLogFile ')'
+        strTergetCurrentPrompt = strTergetLoginPrompt
+        strcompare strTergetEnableCommand ''
+        if result = 0 then
+            call checkLoginOnly
+            goto TERGET_LOGIN_END
+        else
+            mpause iCommandInterval
+            sendln strTergetEnableCommand
+            mpause iCommandInterval
+            sendln strTergetEnablePW
+            filewrite fhToolLogFile ' OK: 管理者ログインコマンド実行('
+            filewrite fhToolLogFile strTergetEnableCommandLog
+            filewriteln fhToolLogFile ')'
+            goto TERGET_LOGIN_ADMINISTRATOR
+        endif
+    elseif result = 4 then
+        filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+        filewrite fhToolLogFile strTergetEnablePrompt
+        filewriteln fhToolLogFile ')'
+        call checkLoginOnly
+        strTergetCurrentPrompt = strTergetEnablePrompt
+        goto TERGET_LOGIN_END
+    endif
+
+    ;ログインPW確認メッセージ
+    :TERGET_LOGIN_PW
+
+    mpause iCommandInterval
+    wait strTergetLoginPWMessage strTergetLoginPrompt strTergetEnablePrompt
+    flushrecv
+    if result = 0 then
+        iLoginError = 1
+        strMessage = 'ログインPW確認メッセージ待ちタイムアウト('
+        strconcat strMessage strTergetLoginCommandLog
+        strconcat strMessage ')'
+        messagebox strMessage strNumber
+        filewrite fhToolLogFile ' NG: '
+        filewriteln fhToolLogFile strMessage
+        do
+            strMessage = 'ツール実行を継続しますか？'
+            yesnobox strMessage strNumber
+            if result = 0 then
+                end
+            endif
+            if iServerNumber = 0 then
+                testlink
+                if result <> 2 then
+                    break
+                endif
+                strMessage = 'コネクションが接続されています。'#13#10
+                strconcat strMessage '手動にてコネクションが切断された状態にしてください。'
+                messagebox strMessage strNumber
+            else
+                sendln ''
+                mpause iCommandInterval
+                if iServerNumber = 1 wait strServer1CurrentPrompt
+                if iServerNumber = 2 wait strServer2CurrentPrompt
+                if iServerNumber = 3 wait strServer3CurrentPrompt
+                flushrecv
+                if result = 1 then
+                    break
+                endif
+                strMessage = '踏み台サーバのプロンプトが正しく表示されていません。'#13#10
+                strconcat strMessage '手動にて踏み台サーバのプロンプトが正しく表示された状態にしてください。'
+                messagebox strMessage strNumber
+            endif
+        loop
+        goto TERGET_LOGIN_END
+    elseif result = 1 then
+        mpause iCommandInterval
+        sendln strTergetLoginPW
+        filewrite fhToolLogFile ' OK: ログインPW確認メッセージ表示('
+        filewrite fhToolLogFile strTergetLoginPWMessage
+        filewriteln fhToolLogFile ')'
+        goto TERGET_LOGIN_GUEST
+    elseif result = 2 then
+        filewrite fhToolLogFile ' OK: ログイン成功時プロンプト表示('
+        filewrite fhToolLogFile strTergetLoginPrompt
+        filewriteln fhToolLogFile ')'
+        strTergetCurrentPrompt = strTergetLoginPrompt
+        strcompare strTergetEnableCommand ''
+        if result = 0 then
+            call checkLoginOnly
+            goto TERGET_LOGIN_END
+        else
+            mpause iCommandInterval
+            sendln strTergetEnableCommand
+            mpause iCommandInterval
+            sendln strTergetEnablePW
+            filewrite fhToolLogFile ' OK: 管理者ログインコマンド実行('
+            filewrite fhToolLogFile strTergetEnableCommandLog
+            filewriteln fhToolLogFile ')'
+            goto TERGET_LOGIN_ADMINISTRATOR
+        endif
+    elseif result = 3 then
+        filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+        filewrite fhToolLogFile strTergetEnablePrompt
+        filewriteln fhToolLogFile ')'
+        call checkLoginOnly
+        strTergetCurrentPrompt = strTergetEnablePrompt
+        goto TERGET_LOGIN_END
+    endif
+
+    ;ログイン成功時プロンプト
+    :TERGET_LOGIN_GUEST
+
+    mpause iCommandInterval
+    wait strTergetLoginPrompt strTergetEnablePrompt
+    flushrecv
+    if result = 0 then
+        iLoginError = 1
+        strMessage = 'ログイン成功時プロンプト待ちタイムアウト('
+        strconcat strMessage strTergetLoginCommandLog
+        strconcat strMessage ')'
+        messagebox strMessage strNumber
+        filewrite fhToolLogFile ' NG: '
+        filewriteln fhToolLogFile strMessage
+        do
+            strMessage = 'ツール実行を継続しますか？'
+            yesnobox strMessage strNumber
+            if result = 0 then
+                end
+            endif
+            if iServerNumber = 0 then
+                testlink
+                if result <> 2 then
+                    break
+                endif
+                strMessage = 'コネクションが接続されています。'#13#10
+                strconcat strMessage '手動にてコネクションが切断された状態にしてください。'
+                messagebox strMessage strNumber
+            else
+                sendln ''
+                mpause iCommandInterval
+                if iServerNumber = 1 wait strServer1CurrentPrompt
+                if iServerNumber = 2 wait strServer2CurrentPrompt
+                if iServerNumber = 3 wait strServer3CurrentPrompt
+                flushrecv
+                if result = 1 then
+                    break
+                endif
+                strMessage = '踏み台サーバのプロンプトが正しく表示されていません。'#13#10
+                strconcat strMessage '手動にて踏み台サーバのプロンプトが正しく表示された状態にしてください。'
+                messagebox strMessage strNumber
+            endif
+        loop
+        goto TERGET_LOGIN_END
+    elseif result = 1 then
+        filewrite fhToolLogFile ' OK: ログイン成功時プロンプト表示('
+        filewrite fhToolLogFile strTergetLoginPrompt
+        filewriteln fhToolLogFile ')'
+        strTergetCurrentPrompt = strTergetLoginPrompt
+        strcompare strTergetEnableCommand ''
+        if result = 0 then
+            call checkLoginOnly
+            goto TERGET_LOGIN_END
+        else
+            mpause iCommandInterval
+            sendln strTergetEnableCommand
+            mpause iCommandInterval
+            sendln strTergetEnablePW
+            filewrite fhToolLogFile ' OK: 管理者ログインコマンド実行('
+            filewrite fhToolLogFile strTergetEnableCommandLog
+            filewriteln fhToolLogFile ')'
+            goto TERGET_LOGIN_ADMINISTRATOR
+        endif
+    elseif result = 2 then
+        filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+        filewrite fhToolLogFile strTergetEnablePrompt
+        filewriteln fhToolLogFile ')'
+        call checkLoginOnly
+        strTergetCurrentPrompt = strTergetEnablePrompt
+        goto TERGET_LOGIN_END
+    endif
+
+    ;管理者ログイン成功時プロンプト
+    :TERGET_LOGIN_ADMINISTRATOR
+
+    mpause iCommandInterval
+    wait strTergetEnablePrompt
+    flushrecv
+    if result = 0 then
+        iLoginError = 1
+        strMessage = '管理者ログイン成功時プロンプト待ちタイムアウト('
+        strconcat strMessage strTergetLoginCommandLog
+        strconcat strMessage ')'
+        messagebox strMessage strNumber
+        filewrite fhToolLogFile ' NG: '
+        filewriteln fhToolLogFile strMessage
+        do
+            strMessage = 'ツール実行を継続しますか？'
+            yesnobox strMessage strNumber
+            if result = 0 then
+                end
+            endif
+            if iServerNumber = 0 then
+                testlink
+                if result <> 2 then
+                    break
+                endif
+                strMessage = 'コネクションが接続されています。'#13#10
+                strconcat strMessage '手動にてコネクションが切断された状態にしてください。'
+                messagebox strMessage strNumber
+            else
+                sendln ''
+                mpause iCommandInterval
+                if iServerNumber = 1 wait strServer1CurrentPrompt
+                if iServerNumber = 2 wait strServer2CurrentPrompt
+                if iServerNumber = 3 wait strServer3CurrentPrompt
+                flushrecv
+                if result = 1 then
+                    break
+                endif
+                strMessage = '踏み台サーバのプロンプトが正しく表示されていません。'#13#10
+                strconcat strMessage '手動にて踏み台サーバのプロンプトが正しく表示された状態にしてください。'
+                messagebox strMessage strNumber
+            endif
+        loop
+        goto TERGET_LOGIN_END
+    elseif result = 1 then
+        filewrite fhToolLogFile ' OK: 管理者ログイン成功時プロンプト表示('
+        filewrite fhToolLogFile strTergetEnablePrompt
+        filewriteln fhToolLogFile ')'
+        call checkLoginOnly
+        strTergetCurrentPrompt = strTergetEnablePrompt
+        goto TERGET_LOGIN_END
+    endif
+
+    ;ログイン終了
+    :TERGET_LOGIN_END
+
+    if iLoginError = 1 then
+        iLoginError = 0
+        goto LIST_FILE_READ
+    endif
+
+    ;一括表示コマンドの実行
+    mpause iCommandInterval
+    sendln strTergetBatchCommand
+    mpause iCommandInterval
+    wait strTergetCurrentPrompt
+    flushrecv
+
+    ;実機ログファイル（項番単位）オープン
+    if iServerNumber = 0 then
+        if iDeviceLogFileWrite = 1 then
+            mpause iToolLogOpenWaitTime
+            strDeviceLogFileName = strDeviceLogFileNameFormat
+            call openDeviceLogFile
+        endif
+    endif
+
+    ;実機ログファイル（ホスト単位）オープン
+    if iDeviceLogFileWrite = 2 then
+        mpause iToolLogOpenWaitTime
+        strDeviceLogFileName = strDeviceLogFileNameFormat
+        strreplace strDeviceLogFileName 1 HOST_RESERVED_WORD strCurrentHost
+        call openDeviceLogFile
+    endif
+
+;-------------------------------------------------------------------------------
+; 6. 対象機器のコマンドの実行
+;-------------------------------------------------------------------------------
+
+;対象機器のコマンドの実行
+:TERGET_COMMAND
+
+    timeout = iCommandTimeout
+    call getListFileWord
+    if result = 0 goto TERGET_LOGOUT
+    strCurrentCommand = strCurrentWord
+
+    ;実機ログファイル（コマンド単位）オープン
+    if iDeviceLogFileWrite = 3 then
+        mpause iToolLogOpenWaitTime
+        strDeviceLogFileName = strDeviceLogFileNameFormat
+        strreplace strDeviceLogFileName 1 HOST_RESERVED_WORD strCurrentHost
+        strreplace strDeviceLogFileName 1 COMMAND_RESERVED_WORD strCurrentCommand
+        call openDeviceLogFile
+    endif
+
+    ;コネクションおよびプロンプト確認
+    testlink
+    if result <> 2 then
+        strMessage = 'コネクション未接続('
+        strconcat strMessage strCurrentCommand
+        strconcat strMessage ')'
+        messagebox strMessage strNumber
+        filewrite fhToolLogFile ' NG: '
+        filewriteln fhToolLogFile strMessage
+        end
+    endif
+    flushrecv
+    mpause iCommandInterval
+    sendln ''
+    mpause iCommandInterval
+    wait strTergetCurrentPrompt
+    flushrecv
+    if result = 0 then
+        strMessage = 'プロンプト待ちタイムアウト('
+        strconcat strMessage strCurrentCommand
+        strconcat strMessage ')'
+        messagebox strMessage strNumber
+        filewrite fhToolLogFile ' NG: '
+        filewriteln fhToolLogFile strMessage
+        end
+    endif
+
+    ;コマンドがbeepコマンドの場合
+    strcompare strCurrentCommand BEEP_COMMAND
+    if result = 0 then
+        beep
+        flushrecv
+        mpause iCommandInterval
+        wait strTergetCurrentPrompt
+        flushrecv
+    endif
+
+    ;コマンドがwaitコマンドの場合
+    strscan strCurrentCommand WAIT_COMMAND
+    if result = 1 then
+        strlen WAIT_COMMAND
+        iPos = result + 1
+        strscan strCurrentCommand ' '
+        if result = iPos then
+            strLen strCurrentCommand
+            iLen = result - iPos
+            iPos = iPos + 1
+            strcopy strCurrentCommand iPos iLen strWaitTime
+            str2int iWaitTime strWaitTime
+            pause iWaitTime
+        endif
+    endif
+
+    ;コマンドがstopコマンドの場合
+    strcompare strCurrentCommand STOP_COMMAND
+    if result = 0 then
+        strMessage = 'ツール実行を再開しますか？'
+        yesnobox strMessage strNumber
+        if result = 0 then
+            end
+        endif
+    endif
+
+    ;コマンドがabortコマンドの場合
+    strcompare strCurrentCommand ABORT_COMMAND
+    if result = 0 then
+        iSuccessHostNumber = iSuccessHostNumber + 1
+        int2str strSuccessHostNumber iSuccessHostNumber
+        filewrite fhToolLogFile ' OK: コマンド実行('
+        filewrite fhToolLogFile strCurrentCommand
+        filewriteln fhToolLogFile ')'
+        filewriteln fhToolLogFile ''
+        filewrite fhToolLogFile 'Result: '
+        if iCurrentHostNumber = iSuccessHostNumber then
+            filewrite fhToolLogFile 'SUCCESS'
+        else
+             filewrite fhToolLogFile 'FAILED'
+        endif
+        filewrite fhToolLogFile '('
+        filewrite fhToolLogFile strSuccessHostNumber
+        filewrite fhToolLogFile '/'
+        filewrite fhToolLogFile strCurrentHostNumber
+        filewriteln fhToolLogFile ')'
+        messagebox strMessage strNumber
+        closett
+        end
+    endif
+
+    ;コマンドがrepeatコマンドの場合
+    strscan strCurrentCommand REPEAT_COMMAND
+    if result = 1 then
+        strBuffer = ''
+        ;コマンドの取得
+        strscan strCurrentCommand '"'
+        iPos = result + 1
+        strlen strCurrentCommand
+        iLen = result - iPos + 1
+        strcopy strCurrentCommand iPos iLen strBuffer
+        iPos = 1
+        strscan strBuffer '"'
+        iLen = result - 1
+        strcopy strBuffer iPos iLen strCommand
+        ;条件の取得
+        strscan strBuffer '"'
+        iPos = result + 3
+        strlen strBuffer
+        iLen = result - iPos + 1
+        strcopy strBuffer iPos iLen strBuffer
+        iPos = 1
+        strscan strBuffer '"'
+        iLen = result - 1
+        strcopy strBuffer iPos iLen strCondition
+        ;インターバルの取得
+        strscan strBuffer '"'
+        iPos = result + 2
+        strlen strBuffer
+        iLen = result - iPos + 1
+        strcopy strBuffer iPos iLen strBuffer
+        iPos = 1
+        strscan strBuffer ' '
+        iLen = result - 1
+        strcopy strBuffer iPos iLen strInterval
+        str2int iInterval strInterval
+        ;繰り返し回数の取得
+        strscan strBuffer ' '
+        iPos = result + 1
+        strlen strBuffer
+        iLen = result - iPos + 1
+        strcopy strBuffer iPos iLen strRepeat
+        str2int iRepeat strRepeat
+        iTemporaryTimeout = timeout
+        timeout = iInterval
+        i = 0
+        do
+            sendln strCommand
+            wait strCondition
+            flushrecv
+            if result = 1 then
+                break
+            endif
+            i = i + 1
+            if i >= iRepeat then
+                strMessage = '繰り返し回数が上限へ達しました('
+                strconcat strMessage strCurrentCommand
+                strconcat strMessage ')'
+                messagebox strMessage strNumber
+                filewrite fhToolLogFile ' NG: '
+                filewriteln fhToolLogFile strMessage
+                strMessage = 'ツール実行を継続しますか？'
+                yesnobox strMessage strNumber
+                if result = 0 then
+                    end
+                endif
+                break
+            endif
+        loop
+        timeout = iTemporaryTimeout
+    endif
+
+    ;コマンドがloadコマンドの場合
+    strscan strCurrentCommand LOAD_COMMAND
+    if result = 1 then
+        strlen LOAD_COMMAND
+        iPos = result + 1
+        strscan strCurrentCommand ' '
+        if result = iPos then
+
+            ;プロンプト待ちオプションチェック
+            strscan strCurrentCommand LOAD_WP_OPTION
+            if result > 0 then
+                iLoadWaitPrompt = 1
+                iPos = iPos + 4
+            endif
+
+            ;コンフィグファイル名の取得
+            strLen strCurrentCommand
+            iLen = result - iPos
+            iPos = iPos + 1
+            strcopy strCurrentCommand iPos iLen strConfigFileName
+
+            ;コンフィグファイルのオープン
+            filesearch strConfigFileName
+            if result = 0 then
+                strMessage = 'コンフィグファイルが見つかりません('
+                strconcat strMessage strConfigFileName 
+                strconcat strMessage ')'
+                messagebox strMessage strNumber
+                filewriteln fhToolLogFile strMessage
+                fileclose fhToolLogFile
+                end
+            endif
+            fileopen fhConfigFile strConfigFileName 0
+            if fhConfigFile = -1 then
+                strMessage = 'コンフィグファイルが開けません('
+                strconcat strMessage strConfigFileName 
+                strconcat strMessage ')'
+                messagebox strMessage strNumber
+                filewriteln fhToolLogFile strMessage
+                fileclose fhToolLogFile
+                end
+            endif
+
+            ;コンフィグファイルの読み込みおよび流し込み
+            filereadln fhConfigFile strLine
+            do while result = 0
+
+                ;コマンドがbeepコマンドの場合
+                strcompare strLine BEEP_COMMAND
+                if result = 0 then
+                    beep
+                    flushrecv
+                    mpause iCommandInterval
+                    wait strTergetCurrentPrompt
+                    flushrecv
+                endif
+
+                ;コマンドがwaitコマンドの場合
+                strscan strLine WAIT_COMMAND
+                if result = 1 then
+                    strlen WAIT_COMMAND
+                    iPos = result + 1
+                    strscan strLine ' '
+                    if result = iPos then
+                        strLen strLine
+                        iLen = result - iPos
+                        iPos = iPos + 1
+                        strcopy strLine iPos iLen strWaitTime
+                        str2int iWaitTime strWaitTime
+                        pause iWaitTime
+                    endif
+                endif
+
+                ;コマンドがstopコマンドの場合
+                strcompare strLine STOP_COMMAND
+                if result = 0 then
+                    strMessage = 'ツール実行を再開しますか？'
+                    yesnobox strMessage strNumber
+                    if result = 0 then
+                        end
+                    endif
+                endif
+
+                ;コマンドがabortコマンドの場合
+                strcompare strLine ABORT_COMMAND
+                if result = 0 then
+                    iSuccessHostNumber = iSuccessHostNumber + 1
+                    int2str strSuccessHostNumber iSuccessHostNumber
+                    fileclose fhConfigFile
+                    filewrite fhToolLogFile ' OK: コマンド実行('
+                    filewrite fhToolLogFile strCurrentCommand
+                    filewriteln fhToolLogFile ')'
+                    filewriteln fhToolLogFile ''
+                    filewrite fhToolLogFile 'Result: '
+                    if iCurrentHostNumber = iSuccessHostNumber then
+                        filewrite fhToolLogFile 'SUCCESS'
+                    else
+                        filewrite fhToolLogFile 'FAILED'
+                    endif
+                    filewrite fhToolLogFile '('
+                    filewrite fhToolLogFile strSuccessHostNumber
+                    filewrite fhToolLogFile '/'
+                    filewrite fhToolLogFile strCurrentHostNumber
+                    filewriteln fhToolLogFile ')'
+                    closett
+                    end
+                endif
+
+                ;コマンドがrepeatコマンドの場合
+                strscan strLine REPEAT_COMMAND
+                if result = 1 then
+                    strBuffer = ''
+                    ;コマンドの取得
+                    strscan strLine '"'
+                    iPos = result + 1
+                    strlen strLine
+                    iLen = result - iPos + 1
+                    strcopy strLine iPos iLen strBuffer
+                    iPos = 1
+                    strscan strBuffer '"'
+                    iLen = result - 1
+                    strcopy strBuffer iPos iLen strCommand
+                    ;条件の取得
+                    strscan strBuffer '"'
+                    iPos = result + 3
+                    strlen strBuffer
+                    iLen = result - iPos + 1
+                    strcopy strBuffer iPos iLen strBuffer
+                    iPos = 1
+                    strscan strBuffer '"'
+                    iLen = result - 1
+                    strcopy strBuffer iPos iLen strCondition
+                    ;インターバルの取得
+                    strscan strBuffer '"'
+                    iPos = result + 2
+                    strlen strBuffer
+                    iLen = result - iPos + 1
+                    strcopy strBuffer iPos iLen strBuffer
+                    iPos = 1
+                    strscan strBuffer ' '
+                    iLen = result - 1
+                    strcopy strBuffer iPos iLen strInterval
+                    str2int iInterval strInterval
+                    ;繰り返し回数の取得
+                    strscan strBuffer ' '
+                    iPos = result + 1
+                    strlen strBuffer
+                    iLen = result - iPos + 1
+                    strcopy strBuffer iPos iLen strRepeat
+                    str2int iRepeat strRepeat
+                    iTemporaryTimeout = timeout
+                    timeout = iInterval
+                    i = 0
+                    do
+                        sendln strCommand
+                        wait strCondition
+                        flushrecv
+                        if result = 1 then
+                            break
+                        endif
+                        i = i + 1
+                        if i >= iRepeat then
+                            strMessage = '繰り返し回数が上限へ達しました('
+                            strconcat strMessage strCurrentCommand
+                            strconcat strMessage ')'
+                            messagebox strMessage strNumber
+                            filewrite fhToolLogFile ' NG: '
+                            filewriteln fhToolLogFile strMessage
+                            strMessage = 'ツール実行を継続しますか？'
+                            yesnobox strMessage strNumber
+                            if result = 0 then
+                                end
+                            endif
+                            break
+                        endif
+                    loop
+                    timeout = iTemporaryTimeout
+                endif
+
+                ;コマンドがそれ以外の場合
+                strscan strLine '\'
+                if result <> 1 then
+                    sendln strLine
+                    if iLoadWaitPrompt = 1 then
+                        wait strTergetCurrentPrompt
+                    else
+                        mpause iCommandInterval
+                    endif
+                endif
+
+                filereadln fhConfigFile strLine
+            loop
+
+            ;コンフィグファイルのクローズ
+            fileclose fhConfigFile
+
+            mpause iCommandInterval
+            sendln ''
+            mpause iCommandInterval
+            wait strTergetCurrentPrompt
+            flushrecv
+        endif
+    endif
+
+    ;コマンドがそれ以外の場合
+    strscan strCurrentCommand '#'
+    if result <> 1 then
+        strscan strCurrentCommand '\'
+        if result <> 1 then
+            do
+                strreplace strCurrentCommand 1 CRLF_COMMAND #13#10
+            loop while result = 1
+            flushrecv
+            mpause iCommandInterval
+            sendln strCurrentCommand
+            mpause iCommandInterval
+            wait strTergetCurrentPrompt
+            flushrecv
+        endif
+    endif
+
+    filewrite fhToolLogFile ' OK: コマンド実行('
+    filewrite fhToolLogFile strCurrentCommand
+    filewriteln fhToolLogFile ')'
+
+    ;実機ログファイル（コマンド単位）クローズ
+    if iDeviceLogFileWrite = 3 then
+        mpause iToolLogCloseWaitTime
+        logclose
+    endif
+
+    goto TERGET_COMMAND
+
+;-------------------------------------------------------------------------------
+; 7. 対象機器のログアウト
+;-------------------------------------------------------------------------------
+
+;対象機器のログアウト
+:TERGET_LOGOUT
+
+    ;実機ログファイル（ホスト単位）クローズ
+    if iDeviceLogFileWrite = 2 then
+        mpause iToolLogCloseWaitTime
+        logclose
+    endif
+
+    ;実機ログファイル（項番単位）クローズ
+    if iServerNumber = 0 then
+        if iDeviceLogFileWrite = 1 then
+            mpause iToolLogCloseWaitTime
+            logclose
+        endif
+    endif
+
+    ;ログアウト開始
+    :TERGET_LOGOUT_START
+    
+    ;コネクション確認
+    testlink
+    if result <> 2 then
+        strMessage = 'コネクション未接続('
+        strconcat strMessage strTergetLogoutCommandLog
+        strconcat strMessage ')'
+        messagebox strMessage strNumber
+        filewrite fhToolLogFile ' NG: '
+        filewriteln fhToolLogFile strMessage
+        end
+    endif
+    flushrecv
+    mpause iCommandInterval
+    sendln ''
+
+    ;ログアウトコマンド実行
+    :TERGET_LOGOUT_COMMAND
+
+    mpause iCommandInterval
+    wait strTergetLoginPrompt strTergetEnablePrompt
+    flushrecv
+    if result = 0 then
+        iLogoutError = 1
+        strMessage = 'ログアウトタイムアウト('
+        strconcat strMessage strTergetLogoutCommandLog
+        strconcat strMessage ')'
+        messagebox strMessage strNumber
+        filewrite fhToolLogFile ' NG: '
+        filewriteln fhToolLogFile strMessage
+        strMessage = 'ツール実行を継続しますか？'
+        yesnobox strMessage strNumber
+        if result = 0 then
+            end
+        endif
+        goto TERGET_LOGOUT_END
+    elseif result = 1 then
+        strTergetCurrentPrompt = strTergetLoginPrompt
+        mpause iCommandInterval
+        sendln strTergetLogoutCommand
+        filewrite fhToolLogFile ' OK: ログアウトコマンド実行('
+        filewrite fhToolLogFile strTergetLogoutCommandLog
+        filewriteln fhToolLogFile ')'
+    elseif result = 2 then
+        strTergetCurrentPrompt = strTergetEnablePrompt
+        strcompare strTergetDisableCommand ''
+        if result <> 0 then
+            mpause iCommandInterval
+            sendln strTergetDisableCommand
+            filewrite fhToolLogFile ' OK: 管理者ログアウトコマンド実行('
+            filewrite fhToolLogFile strTergetDisableCommandLog
+            filewriteln fhToolLogFile ')'
+        endif
+        mpause iCommandInterval
+        sendln strTergetLogoutCommand
+        filewrite fhToolLogFile ' OK: ログアウトコマンド実行('
+        filewrite fhToolLogFile strTergetLogoutCommandLog
+        filewriteln fhToolLogFile ')'
+    endif
+    if iServerNumber = 0 then
+        do
+            testlink
+            if result <> 2 then
+                break
+            endif
+        loop
+    endif
+    
+    ;ログアウト終了
+    :TERGET_LOGOUT_END
+
+    if iLogoutError = 1 then
+        iLogoutError = 0
+        goto LIST_FILE_READ
+    endif
+    
+    iSuccessHostNumber = iSuccessHostNumber + 1
+    int2str strSuccessHostNumber iSuccessHostNumber
+    goto LIST_FILE_READ
+
+;-------------------------------------------------------------------------------
+; 8. 踏み台サーバのログアウト
+;-------------------------------------------------------------------------------
+
+;踏み台サーバのログアウト
+:SERVER_LOGOUT
+
+    if iServerNumber >= 1 then
+        ;実機ログファイル（項番単位）クローズ
+        if iDeviceLogFileWrite = 1 then
+            mpause iToolLogCloseWaitTime
+            logclose
+        endif
+    endif
+
+    if iServerNumber >= 3 then
+
+        filewriteln fhToolLogFile ''
+        filewrite fhToolLogFile 'No.0 踏み台サーバ3('
+        filewrite fhToolLogFile strServer3Address
+        filewriteln fhToolLogFile ')'
+        
+        ;ログアウト開始
+        :SERVER3_LOGOUT_START
+
+        ;コネクション確認
+        testlink
+        if result <> 2 then
+            strMessage = 'コネクション未接続('
+            strconcat strMessage strServer3LogoutCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        endif
+        flushrecv
+        mpause iCommandInterval
+        sendln ''
+
+        ;ログアウトコマンド実行
+        :SERVER3_LOGOUT_COMMAND
+
+        mpause iCommandInterval
+        wait strServer3LoginPrompt strServer3EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLogoutError = 1
+            strMessage = 'ログアウトタイムアウト('
+            strconcat strMessage strServer3LogoutCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: ('
+            filewriteln fhToolLogFile strMessage
+            strMessage = 'ツール実行を継続しますか？'
+            yesnobox strMessage strNumber
+            if result = 0 then
+                end
+            endif
+            goto SERVER3_LOGOUT_END
+        elseif result = 1 then
+            strServer3CurrentPrompt = strServer3LoginPrompt
+            mpause iCommandInterval
+            sendln strServer3LogoutCommand
+            filewrite fhToolLogFile ' OK: ログアウトコマンド実行('
+            filewrite fhToolLogFile strServer3LogoutCommandLog
+            filewriteln fhToolLogFile ')'
+        elseif result = 2 then
+            strServer3CurrentPrompt = strServer3EnablePrompt
+            strcompare strServer3DisableCommand ''
+            if result <> 0 then
+                mpause iCommandInterval
+                sendln strServer3DisableCommand
+                filewrite fhToolLogFile ' OK: 管理者ログアウトコマンド実行('
+                filewrite fhToolLogFile strServer3DisableCommandLog
+                filewriteln fhToolLogFile ')'
+            endif
+            mpause iCommandInterval
+            sendln strServer3LogoutCommand
+            filewrite fhToolLogFile ' OK: ログアウトコマンド実行('
+            filewrite fhToolLogFile strServer3LogoutCommandLog
+            filewriteln fhToolLogFile ')'
+        endif
+        wait strServer2CurrentPrompt
+        flushrecv
+
+        ;ログイン終了
+        :SERVER3_LOGOUT_END
+    
+        if iLogoutError = 1 then
+            iLogoutError = 0
+            end
+        endif
+        
+    endif
+
+    if iServerNumber >= 2 then
+
+        filewriteln fhToolLogFile ''
+        filewrite fhToolLogFile 'No.0 踏み台サーバ2('
+        filewrite fhToolLogFile strServer2Address
+        filewriteln fhToolLogFile ')'
+        
+        ;ログアウト開始
+        :SERVER2_LOGOUT_START
+
+        ;コネクション確認
+        testlink
+        if result <> 2 then
+            strMessage = 'コネクション未接続('
+            strconcat strMessage strServer2LogoutCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        endif
+        flushrecv
+        mpause iCommandInterval
+        sendln ''
+
+        ;ログアウトコマンド実行
+        :SERVER2_LOGOUT_COMMAND
+
+        mpause iCommandInterval
+        wait strServer2LoginPrompt strServer2EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLogoutError = 1
+            strMessage = 'ログアウトタイムアウト('
+            strconcat strMessage strServer2LogoutCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: ('
+            filewriteln fhToolLogFile strMessage
+            strMessage = 'ツール実行を継続しますか？'
+            yesnobox strMessage strNumber
+            if result = 0 then
+                end
+            endif
+            goto SERVER2_LOGOUT_END
+        elseif result = 1 then
+            strServer2CurrentPrompt = strServer2LoginPrompt
+            mpause iCommandInterval
+            sendln strServer2LogoutCommand
+            filewrite fhToolLogFile ' OK: ログアウトコマンド実行('
+            filewrite fhToolLogFile strServer2LogoutCommandLog
+            filewriteln fhToolLogFile ')'
+        elseif result = 2 then
+            strServer2CurrentPrompt = strServer2EnablePrompt
+            strcompare strServer2DisableCommand ''
+            if result <> 0 then
+                mpause iCommandInterval
+                sendln strServer2DisableCommand
+                filewrite fhToolLogFile ' OK: 管理者ログアウトコマンド実行('
+                filewrite fhToolLogFile strServer2DisableCommandLog
+                filewriteln fhToolLogFile ')'
+            endif
+            mpause iCommandInterval
+            sendln strServer2LogoutCommand
+            filewrite fhToolLogFile ' OK: ログアウトコマンド実行('
+            filewrite fhToolLogFile strServer2LogoutCommandLog
+            filewriteln fhToolLogFile ')'
+        endif
+        wait strServer1CurrentPrompt
+        flushrecv
+
+        ;ログイン終了
+        :SERVER2_LOGOUT_END
+    
+        if iLogoutError = 1 then
+            iLogoutError = 0
+            end
+        endif
+        
+    endif
+
+    if iServerNumber >= 1 then
+
+        filewriteln fhToolLogFile ''
+        filewrite fhToolLogFile 'No.0 踏み台サーバ1('
+        filewrite fhToolLogFile strServer1Address
+        filewriteln fhToolLogFile ')'
+        
+        ;ログアウト開始
+        :SERVER1_LOGOUT_START
+
+        ;コネクション確認
+        testlink
+        if result <> 2 then
+            strMessage = 'コネクション未接続('
+            strconcat strMessage strServer1LogoutCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: '
+            filewriteln fhToolLogFile strMessage
+            end
+        endif
+        flushrecv
+        mpause iCommandInterval
+        sendln ''
+
+        ;ログアウトコマンド実行
+        :SERVER1_LOGOUT_COMMAND
+
+        mpause iCommandInterval
+        wait strServer1LoginPrompt strServer1EnablePrompt
+        flushrecv
+        if result = 0 then
+            iLogoutError = 1
+            strMessage = 'ログアウトタイムアウト('
+            strconcat strMessage strServer1LogoutCommandLog
+            strconcat strMessage ')'
+            messagebox strMessage strNumber
+            filewrite fhToolLogFile ' NG: ('
+            filewriteln fhToolLogFile strMessage
+            strMessage = 'ツール実行を継続しますか？'
+            yesnobox strMessage strNumber
+            if result = 0 then
+                end
+            endif
+            goto SERVER1_LOGOUT_END
+        elseif result = 1 then
+            strServer1CurrentPrompt = strServer1LoginPrompt
+            mpause iCommandInterval
+            sendln strServer1LogoutCommand
+            filewrite fhToolLogFile ' OK: ログアウトコマンド実行('
+            filewrite fhToolLogFile strServer1LogoutCommandLog
+            filewriteln fhToolLogFile ')'
+        elseif result = 2 then
+            strServer1CurrentPrompt = strServer1EnablePrompt
+            strcompare strServer1DisableCommand ''
+            if result <> 0 then
+                mpause iCommandInterval
+                sendln strServer1DisableCommand
+                filewrite fhToolLogFile ' OK: 管理者ログアウトコマンド実行('
+                filewrite fhToolLogFile strServer1DisableCommandLog
+                filewriteln fhToolLogFile ')'
+            endif
+            mpause iCommandInterval
+            sendln strServer1LogoutCommand
+            filewrite fhToolLogFile ' OK: ログアウトコマンド実行('
+            filewrite fhToolLogFile strServer1LogoutCommandLog
+            filewriteln fhToolLogFile ')'
+        endif
+        do
+            testlink
+            if result <> 2 then
+                break
+            endif
+        loop    
+
+        ;ログイン終了
+        :SERVER1_LOGOUT_END
+    
+        if iLogoutError = 1 then
+            iLogoutError = 0
+            end
+        endif
+        
+    endif
+
+;-------------------------------------------------------------------------------
+; 9. 事後処理
+;-------------------------------------------------------------------------------
+
+;事後処理
+:FINALIZE
+
+    ;ログファイルの書き込み
+    filewriteln fhToolLogFile ''
+    filewrite fhToolLogFile 'Result: '
+    if iCurrentHostNumber = iSuccessHostNumber then
+        filewrite fhToolLogFile 'SUCCESS'
+    else
+        filewrite fhToolLogFile 'FAILED'
+    endif
+    filewrite fhToolLogFile '('
+    filewrite fhToolLogFile strSuccessHostNumber
+    filewrite fhToolLogFile '/'
+    filewrite fhToolLogFile strCurrentHostNumber
+    filewriteln fhToolLogFile ')'
+
+    ;リストファイルのクローズ
+    :LIST_FILE_CLOSE
+    fileclose fhListFile
+
+    ;ログファイルのクローズ
+    fileclose fhToolLogFile
+
+end
+
+;-------------------------------------------------------------------------------
+;関数
+;-------------------------------------------------------------------------------
+
+;プロファイルのワード取得
+:getProfileWord
+
+    iScan = 0
+    iLen = 0
+
+    strscan strCurrentLine '='
+    if result = 0 then
+        return
+    endif
+    iScan = result
+    strlen strCurrentLine
+    iLen = result
+    strcopy strCurrentLine iScan + 1 iLen - iScan strCurrentWord
+
+return
+
+;リストファイルのワード取得
+:getListFileWord
+
+    iLineLen = 0
+    iWordLen = 0
+
+    ;先頭の空白とタブの読み飛ばし
+    strscan strCurrentLine #9
+    if result <> 1 strscan strCurrentLine ' '
+    while result = 1
+        strlen strCurrentLine
+        strcopy strCurrentLine 2 result - 1 strCurrentLine
+        strscan strCurrentLine #9
+        if result <> 1 strscan strCurrentLine ' '
+    endwhile
+
+    ;次のタブまでの文字列の抽出
+    strlen strCurrentLine
+    iLineLen = result
+    if iLineLen = 0 then
+        strCurrentWord = ''
+        result = 0
+    else
+        strscan strCurrentLine #9
+        iWordLen = result
+        if iWordLen = 0 then
+            strCurrentWord = strCurrentLine
+            strCurrentLine=''
+            result = 1
+        else
+            strcopy strCurrentLine 1 iWordLen - 1 strCurrentWord
+            strcopy strCurrentLine iWordLen iLineLen - iWordLen + 1 strCurrentLine
+            result = 1
+        endif
+    endif
+
+return
+
+;ログインのみ実行チェック
+:checkLoginOnly
+
+    strcompare strLoginOnlyFlg '-l'
+    if result = 0 then
+        if iServerNumber = 0 then
+            mpause iToolLogOpenWaitTime
+            replaceValue = strDeviceLogFileNameFormat
+            call replaceNGWord
+            strDeviceLogFileName = replaceValue
+            getdir strDir
+            strconcat strDir '\'
+            strconcat strDir strValidNumber
+            strconcat strDir '\'
+            strconcat strDir strDeviceLogFileName
+            strlen strDir
+            if result >= 256 then
+                strMessage = '実機ログファイルのパス長が256バイト以上です'
+                messagebox strMessage strNumber
+                filewrite fhToolLogFile ' NG: '
+                filewriteln fhToolLogFile strMessage
+                end
+            endif
+            loginfo logfile
+            if result <> -1 then
+                logclose
+            endif
+            logopen strDir 0 0 0 0 1
+            sendln ''
+        endif
+
+        end
+    endif
+
+return
+
+;NG文字変換
+:replaceNGWord
+
+    regexoption "SYNTAX_RUBY" "ENCODING_SJIS"
+
+    for cnt 1 9
+      if cnt = 1 then
+        ngChar = '\\'
+        okChar = '$'
+      endif
+      if cnt = 2 then
+        ngChar = '/'
+        okChar = '@'
+      endif
+      if cnt = 3 then
+        ngChar = ':'
+        okChar = ';'
+      endif
+      if cnt = 4 then
+        ngChar = '\*'
+        okChar = '+'
+      endif
+      if cnt = 5 then
+        ngChar = '\?'
+        okChar = '}'
+      endif
+      if cnt = 6 then
+        ngChar = '<'
+        okChar = '('
+      endif
+      if cnt = 7 then
+        ngChar = '>'
+        okChar = ')'
+      endif
+      if cnt = 8 then
+        ngChar = '\|'
+        okChar = '!'
+      endif
+      if cnt = 9 then
+        ngChar = '"'
+        okChar = ''
+      endif
+      
+      do
+        strreplace replaceValue 1 ngChar okChar
+      loop until result = 0
+      
+    next
+
+    regexoption "SYNTAX_RUBY" "ENCODING_ASCII"
+
+return
+
+;プロファイル情報読込
+:readProfileInfo
+
+    filereadln fhProfile strCurrentLine
+    iCurrentLineNumber = iCurrentLineNumber + 1
+    call getProfileWord
+    if result = 0 then
+        int2str strCurrentLineNumber iCurrentLineNumber
+
+        strconcat strMessage strCurrentLineNumber
+        strconcat strMessage '行目)'
+        messagebox strMessage strNumber
+        filewrite fhToolLogFile ' →'
+        filewriteln fhToolLogFile strMessage
+        fileclose fhToolLogFile
+        end
+    endif
+
+return
+
+;実機ログファイルオープン
+:openDeviceLogFile
+
+    replaceValue = strDeviceLogFileName
+    call replaceNGWord
+    strDeviceLogFileName = replaceValue
+    getdir strDir
+    strconcat strDir '\'
+    strconcat strDir strValidNumber
+    strconcat strDir '\'
+    strconcat strDir strDeviceLogFileName
+    strlen strDir
+    if result >= 256 then
+        strMessage = '実機ログファイルのパス長が256バイト以上です'
+        messagebox strMessage strNumber
+        filewrite fhToolLogFile ' NG: '
+        filewriteln fhToolLogFile strMessage
+        end
+    endif
+    loginfo logfile
+    if result <> -1 then
+        logclose
+    endif
+    logopen strDir 0 0 0 0 1
+
+return
